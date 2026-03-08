@@ -1,8 +1,7 @@
-
 from langchain_deepseek import ChatDeepSeek
 from env_utils import *
 
-model = ChatDeepSeek(
+deepseek_llm = ChatDeepSeek(
     model="deepseek-chat",  # 必填：通用对话模型（也可填 deepseek-coder 等）
     api_key=DEEPSEEK_API_KEY,  # 正确参数名：api_key（非 deepseek_api_key）
     base_url=DEEPSEEK_BASE_URL,  # 正确参数名：base_url（非 deepseek_base_url）
