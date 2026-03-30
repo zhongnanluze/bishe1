@@ -18,6 +18,10 @@ from agents.student_affairs_agent import StudentAffairsAgent
 from agents.academic_agent import AcademicAgent
 from session_manager import session_manager
 
+# 导入认证路由
+from auth_routes import router as auth_router
+from database import init_db
+
 # 创建 FastAPI 应用
 app = FastAPI(
     title="学生智能服务系统 API",
@@ -431,12 +435,22 @@ async def cleanup_task():
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
+    # 初始化数据库
+    await init_db()
+    
+    # 注册认证路由
+    app.include_router(auth_router)
+    
     # 启动后台清理任务
     asyncio.create_task(cleanup_task())
     print("=" * 50)
     print("学生智能服务系统 API 已启动")
     print("=" * 50)
     print("可用端点:")
+    print("  - POST /api/auth/register  用户注册")
+    print("  - POST /api/auth/login     用户登录")
+    print("  - POST /api/auth/refresh   刷新Token")
+    print("  - GET  /api/auth/me        获取用户信息")
     print("  - POST /api/chat          智能路由对话（非流式）")
     print("  - POST /api/chat/stream    智能路由对话（流式）")
     print("  - POST /api/chat/direct   指定智能体对话")
