@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN topic VARCHAR(255) NULL COMMENT '对话主题';

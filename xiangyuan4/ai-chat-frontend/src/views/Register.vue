@@ -16,6 +16,8 @@ const registerForm = reactive({
   full_name: ''
 })
 
+const success = ref('')
+
 const handleRegister = async () => {
   if (!registerForm.username || !registerForm.email || !registerForm.password) {
     error.value = '请填写所有必填字段'
@@ -36,8 +38,9 @@ const handleRegister = async () => {
   }
   
   // 密码长度上限验证（后端限制72字节）
-  if (registerForm.password.length > 72) {
-    error.value = '密码长度不能超过72位'
+  const passwordBytes = new Blob([registerForm.password]).size
+  if (passwordBytes > 72) {
+    error.value = '密码长度不能超过72字节'
     return
   }
 
@@ -48,8 +51,8 @@ const handleRegister = async () => {
     const response = await authService.register(registerForm)
     
     if (response && response.success) {
-      // 注册成功，跳转到登录页面
-      router.push('/login')
+      // 注册成功，显示成功提示
+      success.value = '注册成功'
     } else {
       error.value = '注册失败，请检查响应数据'
     }
@@ -95,6 +98,11 @@ const goToLogin = () => {
         </div>
 
         <div class="auth-form">
+          <div v-if="success" class="success-message">
+            {{ success }}
+            <br>
+            <a href="/login" class="success-link">点击跳转到登录页面</a>
+          </div>
           <div v-if="error" class="error-message">
             {{ error }}
           </div>
@@ -309,6 +317,41 @@ const goToLogin = () => {
   cursor: not-allowed;
   border-color: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* 成功提示 */
+.success-message {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #10b981;
+  font-size: 0.9rem;
+}
+
+.success-link {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  margin-top: 0.5rem;
+  display: inline-block;
+}
+
+.success-link:hover {
+  text-decoration: underline;
+  color: #60a5fa;
+}
+
+/* 错误提示 */
+.error-message {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #ef4444;
+  font-size: 0.9rem;
 }
 
 /* 按钮100%拉满 */

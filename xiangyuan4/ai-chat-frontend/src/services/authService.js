@@ -3,8 +3,22 @@
 const API_BASE_URL = 'http://localhost:8000/api/auth'
 
 class AuthService {
+  // 截断密码到72字节
+  truncatePassword(password) {
+    let truncated = password
+    let bytes = new Blob([truncated]).size
+    while (bytes > 72 && truncated.length > 0) {
+      truncated = truncated.slice(0, -1)
+      bytes = new Blob([truncated]).size
+    }
+    return truncated
+  }
+
   // 登录
   async login(username, password) {
+    // 自动截断密码到72字节
+    const truncatedPassword = this.truncatePassword(password)
+    
     const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: {
@@ -12,7 +26,7 @@ class AuthService {
       },
       body: JSON.stringify({
         username,
-        password
+        password: truncatedPassword
       })
     })
 
@@ -26,12 +40,19 @@ class AuthService {
 
   // 注册
   async register(userData) {
+    // 自动截断密码到72字节
+    const truncatedPassword = this.truncatePassword(userData.password)
+    const truncatedUserData = {
+      ...userData,
+      password: truncatedPassword
+    }
+    
     const response = await fetch(`${API_BASE_URL}/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(userData)
+      body: JSON.stringify(truncatedUserData)
     })
 
     if (!response.ok) {
@@ -90,6 +111,10 @@ class AuthService {
       throw new Error('未登录')
     }
 
+    // 自动截断密码到72字节
+    const truncatedOldPassword = this.truncatePassword(oldPassword)
+    const truncatedNewPassword = this.truncatePassword(newPassword)
+
     const response = await fetch(`${API_BASE_URL}/change-password`, {
       method: 'POST',
       headers: {
@@ -97,8 +122,8 @@ class AuthService {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        old_password: oldPassword,
-        new_password: newPassword
+        old_password: truncatedOldPassword,
+        new_password: truncatedNewPassword
       })
     })
 

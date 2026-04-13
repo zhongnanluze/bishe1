@@ -25,8 +25,9 @@ const handleLogin = async () => {
   }
 
   // 密码长度验证（后端限制72字节）
-  if (loginForm.password.length > 72) {
-    error.value = '密码长度不能超过72位'
+  const passwordBytes = new Blob([loginForm.password]).size
+  if (passwordBytes > 72) {
+    error.value = '密码长度不能超过72字节'
     console.log('错误: 密码过长')
     return
   }
@@ -40,11 +41,28 @@ const handleLogin = async () => {
     console.log('登录响应:', response)
 
     if (response && response.access_token) {
-      // 登录成功，保存token并跳转到聊天页面
+      // 登录成功，保存token
       localStorage.setItem('access_token', response.access_token)
       localStorage.setItem('refresh_token', response.refresh_token)
-      console.log('登录成功，跳转到聊天页面')
-      router.push('/chat')
+      
+      // 获取用户信息，判断是否是管理员
+      try {
+        const userInfo = await authService.getCurrentUser()
+        console.log('用户信息:', userInfo)
+        
+        if (userInfo.is_admin) {
+          console.log('管理员登录，跳转到知识库维护页面')
+          router.push('/knowledge-base')
+        } else {
+          console.log('普通用户登录，跳转到聊天页面')
+          router.push('/chat')
+        }
+      } catch (userInfoError) {
+        console.error('获取用户信息失败:', userInfoError)
+        // 获取用户信息失败时，默认跳转到聊天页面
+        console.log('获取用户信息失败，默认跳转到聊天页面')
+        router.push('/chat')
+      }
     } else {
       error.value = '登录失败，请检查响应数据'
       console.log('错误: 响应中没有access_token')

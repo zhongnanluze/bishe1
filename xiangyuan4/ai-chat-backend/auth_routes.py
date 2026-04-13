@@ -90,8 +90,8 @@ async def register(
             username=user_data.username,
             email=user_data.email,
             password_hash=get_password_hash(user_data.password),
-            student_id=user_data.student_id,
-            full_name=user_data.full_name,
+            student_id=user_data.student_id if user_data.student_id else None,
+            full_name=user_data.full_name if user_data.full_name else None,
             is_active=True,
             is_admin=False
         )
@@ -102,7 +102,7 @@ async def register(
         
         # 生成 Token
         access_token = create_access_token(new_user.id, new_user.username)
-        refresh_token = create_refresh_token(new_user.id, new_user.username)
+        refresh_token = create_refresh_token(new_user.id)
         
         return AuthResponse(
             success=True,
@@ -146,7 +146,7 @@ async def login(
     """
     try:
         # 验证用户凭据
-        user = await authenticate_user(db, login_data.username, login_data.password)
+        user = await authenticate_user(login_data.username, login_data.password, db)
         
         if user is None:
             raise HTTPException(
@@ -163,11 +163,11 @@ async def login(
             )
         
         # 更新最后登录时间
-        await update_last_login(db, user.id)
+        await update_last_login(user.id, db)
         
         # 生成 Token
         access_token = create_access_token(user.id, user.username)
-        refresh_token = create_refresh_token(user.id, user.username)
+        refresh_token = create_refresh_token(user.id)
         
         return TokenResponse(
             access_token=access_token,
@@ -198,7 +198,7 @@ async def refresh_token(
     返回新的访问令牌和刷新令牌
     """
     try:
-        result = await refresh_access_token(refresh_data.refresh_token, db)
+        result = await refresh_access_token(refresh_data.refresh_token)
         
         if result is None:
             raise HTTPException(
@@ -233,6 +233,7 @@ async def get_current_user_info(
         email=current_user.email,
         student_id=current_user.student_id,
         full_name=current_user.full_name,
+        avatar=getattr(current_user, 'avatar', None),
         is_active=current_user.is_active,
         is_admin=current_user.is_admin,
         created_at=current_user.created_at,
@@ -251,11 +252,26 @@ async def update_user_profile(
     
     需要认证：Bearer Token
     
+    - **username**: 用户名（可选）
     - **full_name**: 真实姓名（可选）
     - **email**: 邮箱（可选）
     - **student_id**: 学号（可选）
     """
     try:
+        # 检查用户名是否被其他用户使用
+        if profile_data.username and profile_data.username != current_user.username:
+            result = await db.execute(
+                select(User).where(
+                    (User.username == profile_data.username) & 
+                    (User.id != current_user.id)
+                )
+            )
+            if result.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="用户名已被其他用户使用"
+                )
+        
         # 检查邮箱是否被其他用户使用
         if profile_data.email and profile_data.email != current_user.email:
             result = await db.execute(
@@ -286,12 +302,16 @@ async def update_user_profile(
         
         # 更新用户信息
         update_data = {}
+        if profile_data.username is not None:
+            update_data["username"] = profile_data.username
         if profile_data.full_name is not None:
             update_data["full_name"] = profile_data.full_name
         if profile_data.email is not None:
             update_data["email"] = profile_data.email
         if profile_data.student_id is not None:
             update_data["student_id"] = profile_data.student_id
+        if profile_data.avatar is not None:
+            update_data["avatar"] = profile_data.avatar
         
         if update_data:
             await db.execute(
@@ -300,18 +320,27 @@ async def update_user_profile(
                 .values(**update_data)
             )
             await db.commit()
-            await db.refresh(current_user)
+            # 重新从数据库中查询用户信息
+            result = await db.execute(select(User).where(User.id == current_user.id))
+            updated_user = result.scalar_one_or_none()
+        else:
+            # 如果没有更新数据，使用当前用户信息
+            updated_user = None
+        
+        # 构建响应数据
+        user_data = updated_user or current_user
         
         return UserInfoResponse(
-            id=current_user.id,
-            username=current_user.username,
-            email=current_user.email,
-            student_id=current_user.student_id,
-            full_name=current_user.full_name,
-            is_active=current_user.is_active,
-            is_admin=current_user.is_admin,
-            created_at=current_user.created_at,
-            last_login=current_user.last_login
+            id=user_data.id,
+            username=user_data.username,
+            email=user_data.email,
+            student_id=user_data.student_id,
+            full_name=user_data.full_name,
+            avatar=getattr(user_data, 'avatar', None),
+            is_active=user_data.is_active,
+            is_admin=user_data.is_admin,
+            created_at=getattr(user_data, 'created_at', None),
+            last_login=getattr(user_data, 'last_login', None)
         )
         
     except HTTPException:

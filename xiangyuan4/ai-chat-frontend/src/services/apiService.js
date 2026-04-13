@@ -135,6 +135,19 @@ class ApiService {
     
     return response.body
   }
+
+  // 知识库相关方法
+  async getKnowledgeBase() {
+    return this.get('/knowledge-base')
+  }
+
+  async addKnowledgeBaseItem(item) {
+    return this.post('/knowledge-base', item)
+  }
+
+  async deleteKnowledgeBaseItem(id) {
+    return this.delete(`/knowledge-base/${id}`)
+  }
 }
 
 export const apiService = new ApiService()

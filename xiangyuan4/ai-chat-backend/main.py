@@ -18,9 +18,11 @@ from agents.student_affairs_agent import StudentAffairsAgent
 from agents.academic_agent import AcademicAgent
 from session_manager import session_manager
 
-# 导入认证路由
+# 导入认证路由和依赖
 from auth_routes import router as auth_router
-from database import init_db
+from knowledge_base_routes import router as knowledge_base_router
+from auth_utils import get_current_user
+from database import init_db, User
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -122,7 +124,8 @@ async def stream_response(
             end_chunk = {
                 "type": "done",
                 "agent_type": agent_type_str,
-                "action_taken": action_taken
+                "action_taken": action_taken,
+                "session_id": session_id
             }
             yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
         else:
@@ -151,7 +154,8 @@ async def stream_response(
             end_chunk = {
                 "type": "done",
                 "agent_type": agent_type_str,
-                "action_taken": action_taken
+                "action_taken": action_taken,
+                "session_id": session_id
             }
             yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
         
@@ -192,7 +196,7 @@ async def health_check():
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, current_user: Optional[User] = Depends(get_current_user)):
     """
     主要对话端点（非流式）
     
@@ -201,13 +205,14 @@ async def chat(request: ChatRequest):
     try:
         # 1. 获取或创建会话
         session_id = request.session_id
+        user_id = current_user.id if current_user else None
         if not session_id:
-            session_id = await session_manager.create_session()
+            session_id = await session_manager.create_session(user_id=user_id)
         else:
             session = await session_manager.get_session(session_id)
             if not session:
                 # 会话不存在，创建新会话
-                session_id = await session_manager.create_session()
+                session_id = await session_manager.create_session(user_id=user_id)
         
         # 2. 获取对话历史
         conversation_history = await session_manager.get_conversation_history(session_id)
@@ -251,7 +256,7 @@ async def chat(request: ChatRequest):
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, current_user: Optional[User] = Depends(get_current_user)):
     """
     流式对话端点（推荐使用）
     
@@ -260,13 +265,14 @@ async def chat_stream(request: ChatRequest):
     try:
         # 1. 获取或创建会话
         session_id = request.session_id
+        user_id = current_user.id if current_user else None
         if not session_id:
-            session_id = await session_manager.create_session()
+            session_id = await session_manager.create_session(user_id=user_id)
         else:
             session = await session_manager.get_session(session_id)
             if not session:
                 # 会话不存在，创建新会话
-                session_id = await session_manager.create_session()
+                session_id = await session_manager.create_session(user_id=user_id)
         
         # 2. 获取对话历史
         conversation_history = await session_manager.get_conversation_history(session_id)
@@ -295,7 +301,7 @@ async def chat_stream(request: ChatRequest):
 
 
 @app.post("/api/chat/direct/{agent_type}")
-async def chat_direct(agent_type: str, request: ChatRequest):
+async def chat_direct(agent_type: str, request: ChatRequest, current_user: Optional[User] = Depends(get_current_user)):
     """
     直接指定智能体进行对话（非流式）
     
@@ -305,8 +311,9 @@ async def chat_direct(agent_type: str, request: ChatRequest):
     try:
         # 获取或创建会话
         session_id = request.session_id
+        user_id = current_user.id if current_user else None
         if not session_id:
-            session_id = await session_manager.create_session()
+            session_id = await session_manager.create_session(user_id=user_id)
         
         # 根据类型选择智能体
         if agent_type == "student_affairs":
@@ -384,6 +391,21 @@ async def delete_session(session_id: str):
     return {"message": "会话已删除", "session_id": session_id}
 
 
+@app.get("/api/sessions")
+async def get_user_sessions(current_user: User = Depends(get_current_user)):
+    """
+    获取用户的会话列表
+    
+    Returns:
+        List[SessionInfo]: 会话列表
+    """
+    try:
+        sessions = await session_manager.get_user_sessions(current_user.id)
+        return sessions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
+
+
 @app.get("/api/agents")
 async def list_agents():
     """列出所有可用的智能体"""
@@ -441,6 +463,9 @@ async def startup_event():
     # 注册认证路由
     app.include_router(auth_router)
     
+    # 注册知识库路由
+    app.include_router(knowledge_base_router)
+    
     # 启动后台清理任务
     asyncio.create_task(cleanup_task())
     print("=" * 50)
@@ -455,6 +480,9 @@ async def startup_event():
     print("  - POST /api/chat/stream    智能路由对话（流式）")
     print("  - POST /api/chat/direct   指定智能体对话")
     print("  - GET  /api/agents        查看可用智能体")
+    print("  - GET  /api/knowledge-base 获取知识库列表")
+    print("  - POST /api/knowledge-base 添加知识库项")
+    print("  - DELETE /api/knowledge-base/{id} 删除知识库项")
     print("  - GET  /docs              API 文档")
     print("=" * 50)
 

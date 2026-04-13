@@ -7,6 +7,7 @@ const Login = () => import('../views/Login.vue')
 const Register = () => import('../views/Register.vue')
 const Chat = () => import('../views/Chat.vue')
 const Debug = () => import('../views/Debug.vue')
+const KnowledgeBase = () => import('../views/KnowledgeBase.vue')
 
 const routes = [
   {
@@ -38,6 +39,14 @@ const routes = [
     path: '/chat',
     name: 'Chat',
     component: Chat,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/knowledge-base',
+    name: 'KnowledgeBase',
+    component: KnowledgeBase,
     meta: {
       requiresAuth: true
     }

@@ -14,7 +14,7 @@ class UserRegisterRequest(BaseModel):
     """用户注册请求"""
     username: str = Field(..., min_length=3, max_length=50, description="用户名")
     email: EmailStr = Field(..., description="邮箱")
-    password: str = Field(..., min_length=6, max_length=72, description="密码")
+    password: str = Field(..., min_length=6, description="密码")
     student_id: Optional[str] = Field(None, max_length=20, description="学号")
     full_name: Optional[str] = Field(None, max_length=50, description="真实姓名")
 
@@ -33,7 +33,7 @@ class TokenRefreshRequest(BaseModel):
 class PasswordChangeRequest(BaseModel):
     """密码修改请求"""
     old_password: str = Field(..., description="旧密码")
-    new_password: str = Field(..., min_length=6, max_length=72, description="新密码")
+    new_password: str = Field(..., min_length=6, description="新密码")
 
 
 class PasswordResetRequest(BaseModel):
@@ -58,9 +58,10 @@ class UserInfoResponse(BaseModel):
     email: str = Field(..., description="邮箱")
     student_id: Optional[str] = Field(None, description="学号")
     full_name: Optional[str] = Field(None, description="真实姓名")
+    avatar: Optional[str] = Field(None, description="头像URL")
     is_active: bool = Field(..., description="是否激活")
     is_admin: bool = Field(..., description="是否管理员")
-    created_at: datetime = Field(..., description="创建时间")
+    created_at: Optional[datetime] = Field(None, description="创建时间")
     last_login: Optional[datetime] = Field(None, description="最后登录时间")
     
     class Config:
@@ -69,9 +70,11 @@ class UserInfoResponse(BaseModel):
 
 class UserProfileUpdateRequest(BaseModel):
     """用户资料更新请求"""
+    username: Optional[str] = Field(None, min_length=3, max_length=50, description="用户名")
     full_name: Optional[str] = Field(None, max_length=50, description="真实姓名")
     email: Optional[EmailStr] = Field(None, description="邮箱")
     student_id: Optional[str] = Field(None, max_length=20, description="学号")
+    avatar: Optional[str] = Field(None, description="头像URL")
 
 
 class AuthResponse(BaseModel):
@@ -101,5 +104,6 @@ class CurrentUser(BaseModel):
     is_admin: bool = Field(..., description="是否管理员")
     student_id: Optional[str] = Field(None, description="学号")
     full_name: Optional[str] = Field(None, description="真实姓名")
+    avatar: Optional[str] = Field(None, description="头像URL")
     created_at: Optional[datetime] = Field(None, description="创建时间")
     last_login: Optional[datetime] = Field(None, description="最后登录时间")

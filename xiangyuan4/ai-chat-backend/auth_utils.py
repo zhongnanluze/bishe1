@@ -43,6 +43,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: 验证结果
     """
+    # 检查是否是 SHA256 哈希（来自 init_db.py）
+    if hashed_password.startswith('$sha256$'):
+        import hashlib
+        expected_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
+        return hashed_password == f"$sha256${expected_hash}"
+    # 否则使用 bcrypt 验证
     return pwd_context.verify(plain_password, hashed_password)
 
 
@@ -56,7 +62,9 @@ def get_password_hash(password: str) -> str:
     Returns:
         str: 密码哈希
     """
-    return pwd_context.hash(password)
+    # 使用 SHA256 哈希算法，避免 bcrypt 版本兼容性问题
+    import hashlib
+    return f"$sha256${hashlib.sha256(password.encode('utf-8')).hexdigest()}"
 
 
 # ============ Token 工具函数 ============
@@ -136,7 +144,7 @@ def decode_token(token: str) -> Optional[TokenPayload]:
         return None
 
 
-def refresh_access_token(refresh_token: str) -> Optional[str]:
+async def refresh_access_token(refresh_token: str) -> Optional[dict]:
     """
     使用刷新令牌获取新的访问令牌
     
@@ -144,23 +152,32 @@ def refresh_access_token(refresh_token: str) -> Optional[str]:
         refresh_token: 刷新令牌
         
     Returns:
-        Optional[str]: 新的访问令牌，失败返回 None
+        Optional[dict]: 包含新的访问令牌和刷新令牌的字典，失败返回 None
     """
     payload = decode_token(refresh_token)
     
     if payload is None or payload.type != "refresh":
         return None
     
-    # 创建新的访问令牌
-    return create_access_token(payload.sub, payload.username or "")
+    # 创建新的访问令牌和刷新令牌
+    access_token = create_access_token(payload.sub, payload.username or "")
+    new_refresh_token = create_refresh_token(payload.sub)
+    
+    # 返回符合 TokenResponse 模型的字典
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+        "expires_in": 30 * 60  # 30分钟
+    }
 
 
 # ============ 用户认证依赖 ============
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
-) -> CurrentUser:
+) -> Optional[CurrentUser]:
     """
     获取当前登录用户（依赖注入）
     
@@ -170,15 +187,15 @@ async def get_current_user(
             return {"message": f"Hello {current_user.username}"}
     
     Args:
-        credentials: HTTP 认证凭证
+        credentials: HTTP 认证凭证（可选）
         db: 数据库会话
         
     Returns:
-        CurrentUser: 当前用户信息
-        
-    Raises:
-        HTTPException: 认证失败
+        CurrentUser: 当前用户信息，如果未登录则返回 None
     """
+    if not credentials:
+        return None
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无效的认证凭证",
@@ -189,33 +206,26 @@ async def get_current_user(
     token_payload = decode_token(credentials.credentials)
     
     if token_payload is None:
-        raise credentials_exception
+        return None
     
     # 验证 Token 类型
     if token_payload.type != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的 Token 类型",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return None
     
     # 查询用户
     try:
         user_id = int(token_payload.sub)
     except ValueError:
-        raise credentials_exception
+        return None
     
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if user is None:
-        raise credentials_exception
+        return None
     
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="用户账号已被禁用"
-        )
+        return None
     
     return CurrentUser(
         id=user.id,
@@ -225,6 +235,7 @@ async def get_current_user(
         is_admin=user.is_admin,
         student_id=user.student_id,
         full_name=user.full_name,
+        avatar=getattr(user, 'avatar', None),
         created_at=user.created_at,
         last_login=user.last_login
     )
@@ -243,8 +254,14 @@ async def get_current_active_user(
         CurrentUser: 当前用户信息
         
     Raises:
-        HTTPException: 用户未激活
+        HTTPException: 用户未激活或未登录
     """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证凭证",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

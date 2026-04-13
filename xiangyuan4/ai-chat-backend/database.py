@@ -56,6 +56,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
     student_id = Column(String(20), unique=True, nullable=True, comment="学号")
     full_name = Column(String(50), nullable=True, comment="真实姓名")
+    avatar = Column(String(255), nullable=True, comment="头像URL")
     is_active = Column(Boolean, default=True, comment="是否激活")
     is_admin = Column(Boolean, default=False, comment="是否管理员")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
@@ -70,6 +71,7 @@ class SessionModel(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, comment="会话ID")
     session_id = Column(String(100), unique=True, nullable=False, comment="会话标识")
     user_id = Column(Integer, nullable=True, comment="关联用户ID")
+    topic = Column(String(255), nullable=True, comment="对话主题")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     last_active = Column(DateTime, default=datetime.now, comment="最后活跃时间")
     expires_at = Column(DateTime, nullable=False, comment="过期时间")
@@ -89,6 +91,18 @@ class ChatHistory(Base):
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
 
 
+class KnowledgeBaseModel(Base):
+    """知识库表"""
+    __tablename__ = "knowledge_base"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="知识ID")
+    title = Column(String(255), nullable=False, comment="知识标题")
+    content = Column(Text, nullable=False, comment="知识内容")
+    category = Column(String(100), nullable=True, comment="知识分类")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+
 # ============ 数据库操作辅助函数 ============
 
 async def get_db():
@@ -104,7 +118,7 @@ async def init_db():
     """初始化数据库（创建所有表）"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✅ 数据库表创建成功")
+    print("Database tables created successfully")
 
 
 async def drop_db():

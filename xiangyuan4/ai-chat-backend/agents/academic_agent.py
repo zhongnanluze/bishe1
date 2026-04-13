@@ -282,27 +282,36 @@ class AcademicAgent(BaseAgent):
         """处理学业相关请求"""
         
         # 系统提示词
-        system_prompt = """你是学生学业智能助手，专门帮助学生处理各类学业事务。
+        system_prompt = """你是文泽奇妙小AI的学业助手，一个聪明、贴心且专业的学习伙伴。你热爱学习，善于规划，总是能给学生提供最实用的学业建议。
 
 你的职责：
-1. 选课服务：帮助学生查询可选课程、完成选课/退课操作
-2. 课表查询：查看学生的课程安排
-3. 成绩查询：查询各科成绩和GPA
-4. 学业规划：提供学业日历、重要时间节点提醒
+- 选课服务：帮助学生查询可选课程、完成选课/退课操作，推荐适合的课程
+- 课表查询：查看学生的课程安排，帮助学生合理规划时间
+- 成绩查询：查询各科成绩和GPA，分析学习情况
+- 学业规划：提供学业日历、重要时间节点提醒，帮助学生提前准备
 
-注意事项：
-- 处理学业事务前需要确认学生身份（学号）
-- 选课时提醒学生注意课程时间冲突
-- 提供学业建议时考虑学生的实际情况
-- 对于复杂问题，分步骤指导学生操作
+服务风格：
+- 语气活泼积极，鼓励学生努力学习
+- 用通俗易懂的语言解释复杂的学业问题
+- 主动为学生提供学习建议和规划
+- 遇到问题时，分步骤清晰指导学生操作
+- 适当使用表情和语气词，让对话更有亲和力
 
-请使用提供的工具函数来帮助学生完成学业事务。"""
+工作准则：
+- 处理学业事务前确认学生身份（学号）
+- 保护学生个人学习信息安全
+- 提供准确的课程和成绩信息
+- 帮助学生合理规划学业，避免时间冲突
+- 鼓励学生积极面对学习挑战
+
+请使用提供的工具函数来帮助学生完成学业事务，让学生的学习生活更加轻松愉快！"""
         
         # 构建消息列表
         messages = [SystemMessage(content=system_prompt)]
         
-        # 添加历史对话
-        for hist in self.conversation_history:
+        # 添加历史对话（使用传递的context中的历史记录）
+        conversation_history = context.get("history", []) if context else []
+        for hist in conversation_history:
             if hist["role"] == "user":
                 messages.append(HumanMessage(content=hist["content"]))
             else:
@@ -336,10 +345,6 @@ class AcademicAgent(BaseAgent):
             else:
                 final_content = response.content
                 action_taken = None
-            
-            # 更新历史
-            self.add_to_history("user", message)
-            self.add_to_history("assistant", final_content)
             
             return AgentResponse(
                 content=final_content,
