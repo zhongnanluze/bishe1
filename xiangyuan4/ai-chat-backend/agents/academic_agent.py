@@ -13,6 +13,17 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from env_utils import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
 
+# 导入教务系统客户端
+try:
+    from jwxt_cli import JWXTClient
+    JWXT_AVAILABLE = True
+except ImportError:
+    JWXT_AVAILABLE = False
+    print("警告：无法导入jwxt_cli模块，成绩和课表查询将使用模拟数据")
+
+# 全局教务系统客户端实例（单例）
+_jwxt_client = None
+
 
 # ============ 模拟数据库 ============
 
@@ -49,14 +60,35 @@ GRADES_DB = {
 
 # ============ 工具函数定义 ============
 
+def get_jwxt_client():
+    """获取或创建教务系统客户端单例"""
+    global _jwxt_client
+    if _jwxt_client is None and JWXT_AVAILABLE:
+        _jwxt_client = JWXTClient.from_browser()
+    return _jwxt_client
+
 @tool
-def query_course_schedule(student_id: str) -> str:
+def query_course_schedule(student_id: str, xn: str = None, xq: int = None) -> str:
     """
     查询学生课表
     
     Args:
         student_id: 学号
+        xn: 学年（可选，如：2024-2025）
+        xq: 学期（可选，1或2）
     """
+    if JWXT_AVAILABLE:
+        client = get_jwxt_client()
+        if client:
+            try:
+                schedule = client.get_schedule(xn=xn, xq=xq)
+                if schedule:
+                    return f"【{student_id} 的课表】\n\n" + str(schedule)
+                return f"无法获取{student_id}的课表，请检查是否已登录教务系统"
+            except Exception as e:
+                return f"查询课表失败：{str(e)}"
+    
+    # 如果无法使用真实系统，回退到模拟数据
     if student_id not in STUDENT_COURSES_DB:
         return f"未找到学号 {student_id} 的选课记录。"
     
@@ -72,14 +104,62 @@ def query_course_schedule(student_id: str) -> str:
 
 
 @tool
-def query_grades(student_id: str, semester: str = None) -> str:
+def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int = None) -> str:
     """
     查询学生成绩
     
     Args:
         student_id: 学号
         semester: 学期（可选，如：2024-2025-1）
+        xn: 学年（可选，如：2024-2025）
+        xq: 学期（可选，1或2）
     """
+    if JWXT_AVAILABLE:
+        client = get_jwxt_client()
+        if client:
+            try:
+                grades = client.get_grades(xn=xn, xq=xq)
+                if grades:
+                    # 格式化输出成绩
+                    client.print_grades(grades)
+
+                    # 构建成绩信息markdown表格
+                    result = f"## {student_id} 的成绩单\n\n"
+                    result += "| 学期 | 课程名称 | 成绩 |\n"
+                    result += "|------|---------|------|\n"
+
+                    filtered_count = 0
+                    for row in grades:
+                        if len(row) >= 7:
+                            try:
+                                term = row[1]
+                                course_name = row[3]
+                                score = row[5]
+
+                                # 如果指定了学期，只保留匹配的行
+                                if semester and semester not in str(term):
+                                    continue
+                                # 也支持按 xn/xq 过滤（兼容传入拆分参数的情况）
+                                if xn and xn not in str(term):
+                                    continue
+                                if xq is not None and str(xq) not in str(term):
+                                    continue
+
+                                result += f"| {term} | {course_name} | {score} |\n"
+                                filtered_count += 1
+                            except:
+                                pass
+
+                    # 如果过滤后没有结果，给个提示
+                    if filtered_count == 0 and (semester or xn or xq is not None):
+                        return f"未找到 {student_id} 在指定学期的成绩记录（学期：{semester or xn + '-' + str(xq)}）。请确认学期信息是否正确。"
+
+                    return result
+                return f"无法获取{student_id}的成绩，请检查是否已登录教务系统"
+            except Exception as e:
+                return f"查询成绩失败：{str(e)}"
+    
+    # 如果无法使用真实系统，回退到模拟数据
     if student_id not in GRADES_DB:
         return f"未找到学号 {student_id} 的成绩记录。"
     
@@ -91,22 +171,25 @@ def query_grades(student_id: str, semester: str = None) -> str:
     if not grades:
         return f"未找到该学期的成绩记录。"
     
-    grades_info = []
+    # 构建markdown表格
+    result = f"## {student_id} 的成绩单\n\n"
+    result += "| 课程名称 | 成绩 | GPA |\n"
+    result += "|---------|------|-----|\n"
+    
     total_gpa = 0
     total_credits = 0
-    
     for code, info in grades.items():
         course_name = COURSES_DB.get(code, {}).get("name", code)
         credits = COURSES_DB.get(code, {}).get("credits", 0)
-        grades_info.append(f"📖 {course_name}\n   成绩：{info['grade']}分  GPA：{info['gpa']}")
+        result += f"| {course_name} | {info['grade']}分 | {info['gpa']} |\n"
         total_gpa += info['gpa'] * credits
         total_credits += credits
-    
+
     avg_gpa = total_gpa / total_credits if total_credits > 0 else 0
     
-    result = f"【{student_id} 的成绩单】\n\n"
-    result += "\n\n".join(grades_info)
-    result += f"\n\n📊 平均GPA：{avg_gpa:.2f}"
+    result += f"\n### 统计信息\n"
+    result += f"- 平均GPA：{avg_gpa:.2f}\n"
+    result += f"- 总学分：{total_credits}\n"
     
     return result
 
@@ -281,36 +364,37 @@ class AcademicAgent(BaseAgent):
     async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
         """处理学业相关请求"""
         
+        # 获取用户信息
+        user_info = context.get("user_info", {}) if context else {}
+        student_id = user_info.get("student_id")
+        full_name = user_info.get("full_name") or user_info.get("username")
+        
         # 系统提示词
-        system_prompt = """你是文泽奇妙小AI的学业助手，一个聪明、贴心且专业的学习伙伴。你热爱学习，善于规划，总是能给学生提供最实用的学业建议。
+        system_prompt = f"""你是文泽奇妙小AI的学业助手，专业、高效的学习伙伴。
 
 你的职责：
-- 选课服务：帮助学生查询可选课程、完成选课/退课操作，推荐适合的课程
-- 课表查询：查看学生的课程安排，帮助学生合理规划时间
-- 成绩查询：查询各科成绩和GPA，分析学习情况
-- 学业规划：提供学业日历、重要时间节点提醒，帮助学生提前准备
-
-服务风格：
-- 语气活泼积极，鼓励学生努力学习
-- 用通俗易懂的语言解释复杂的学业问题
-- 主动为学生提供学习建议和规划
-- 遇到问题时，分步骤清晰指导学生操作
-- 适当使用表情和语气词，让对话更有亲和力
+- 课表查询：查看学生的课程安排
+- 成绩查询：查询各科成绩和GPA
+- 选课服务：帮助学生查询和选择课程
+- 学业规划：提供学业日历和重要时间节点
 
 工作准则：
-- 处理学业事务前确认学生身份（学号）
-- 保护学生个人学习信息安全
-- 提供准确的课程和成绩信息
-- 帮助学生合理规划学业，避免时间冲突
-- 鼓励学生积极面对学习挑战
+- 使用提供的工具函数完成任务
+- 直接返回工具执行结果，不添加额外解释
+- 如已提供学号，直接使用该学号进行查询
 
-请使用提供的工具函数来帮助学生完成学业事务，让学生的学习生活更加轻松愉快！"""
+当前用户信息：
+- 姓名：{full_name}
+- 学号：{student_id}
+"""
         
         # 构建消息列表
         messages = [SystemMessage(content=system_prompt)]
         
         # 添加历史对话（使用传递的context中的历史记录）
-        conversation_history = context.get("history", []) if context else []
+        conversation_history = []
+        if context and hasattr(context, 'get'):
+            conversation_history = context.get("history", [])
         for hist in conversation_history:
             if hist["role"] == "user":
                 messages.append(HumanMessage(content=hist["content"]))
@@ -332,11 +416,18 @@ class AcademicAgent(BaseAgent):
                     tool_name = tool_call['name']
                     tool_args = tool_call['args']
                     
+                    # 如果工具需要student_id参数，并且我们有用户学号，直接使用
+                    if 'student_id' in tool_args and not tool_args['student_id'] and student_id:
+                        tool_args['student_id'] = student_id
+                    
                     # 找到对应的工具并执行
                     for tool_func in self.tools:
                         if tool_func.name == tool_name:
-                            result = tool_func.invoke(tool_call)
-                            tool_results.append(result)
+                            result = tool_func.invoke(tool_args)
+                            # 处理 ToolMessage 对象
+                            if hasattr(result, 'content'):
+                                result = result.content
+                            tool_results.append(str(result))
                             break
                 
                 # 构建最终响应

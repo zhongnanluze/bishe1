@@ -3,6 +3,7 @@ import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiService } from '../services/apiService'
 import { authService } from '../services/authService'
+import { marked } from 'marked'
 
 const messages = ref([
   {
@@ -37,6 +38,13 @@ const editProfileForm = ref({ // 修改个人信息表单
   avatar: ''
 })
 const isUpdatingProfile = ref(false) // 控制更新状态
+const showChangePassword = ref(false) // 控制修改密码弹窗显示
+const changePasswordForm = ref({ // 修改密码表单
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+const isChangingPassword = ref(false) // 控制修改密码状态
 const selectedSessionId = ref(null) // 跟踪当前选中的会话ID
 
 const agentsInfo = {
@@ -61,6 +69,11 @@ const currentAgentInfo = computed(() => {
   return agentsInfo[currentAgent.value] || agentsInfo.general
 })
 
+// 解析Markdown内容
+const parseMarkdown = (content) => {
+  return marked(content)
+}
+
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return
   
@@ -76,6 +89,13 @@ const sendMessage = async () => {
   isLoading.value = true
   
   try {
+    // 如果还没有会话ID，创建一个新会话
+    if (!sessionId.value) {
+      const response = await apiService.post('/session', { user_info: userInfo.value })
+      sessionId.value = response.session_id
+      selectedSessionId.value = response.session_id
+    }
+    
     if (useStreaming.value) {
       await sendStreamingMessage(userMessage.content)
     } else {
@@ -202,9 +222,30 @@ const scrollToBottom = async () => {
 }
 
 const clearMessages = () => {
+  // 重置会话状态，不创建新会话
+  let welcomeMessage = '你好！我是学生智能服务助手，有什么可以帮助你的吗？'
+  
+  // 如果有用户信息，生成个性化欢迎消息
+  if (userInfo.value) {
+    const { full_name, username, student_id } = userInfo.value
+    welcomeMessage = '你好！'
+    
+    if (full_name) {
+      welcomeMessage += full_name
+    } else if (username) {
+      welcomeMessage += username
+    }
+    
+    if (student_id) {
+      welcomeMessage += `（学号：${student_id}）`
+    }
+    
+    welcomeMessage += '，我是学生智能服务助手，有什么可以帮助你的吗？'
+  }
+  
   messages.value = [{
     id: Date.now(),
-    content: '你好！我是学生智能服务助手，有什么可以帮助你的吗？',
+    content: welcomeMessage,
     sender: 'ai',
     agentType: 'general',
     timestamp: new Date().toLocaleTimeString()
@@ -231,11 +272,39 @@ const fetchUserInfo = async () => {
   try {
     const user = await apiService.get('/auth/me')
     userInfo.value = user
+    // 获取用户信息后，生成个性化欢迎消息
+    updateWelcomeMessage()
     // 获取用户信息后，加载会话列表
     await fetchSessions()
   } catch (error) {
     console.error('获取用户信息失败:', error)
-    authService.logout()
+    // 认证失败时，不强制登出，而是设置用户信息为null
+    userInfo.value = null
+  }
+}
+
+// 更新欢迎消息
+const updateWelcomeMessage = () => {
+  if (userInfo.value) {
+    const { full_name, username, student_id } = userInfo.value
+    let welcomeMessage = '你好！'
+    
+    if (full_name) {
+      welcomeMessage += full_name
+    } else if (username) {
+      welcomeMessage += username
+    }
+    
+    if (student_id) {
+      welcomeMessage += `（学号：${student_id}）`
+    }
+    
+    welcomeMessage += '，我是学生智能服务助手，有什么可以帮助你的吗？'
+    
+    // 更新初始欢迎消息
+    if (messages.value.length === 1 && messages.value[0].sender === 'ai') {
+      messages.value[0].content = welcomeMessage
+    }
   }
 }
 
@@ -340,6 +409,62 @@ const closeEditProfile = () => {
   showEditProfile.value = false
 }
 
+// 切换修改密码弹窗显示状态
+const toggleChangePassword = () => {
+  showChangePassword.value = !showChangePassword.value
+  showMenu.value = false // 关闭菜单
+}
+
+// 关闭修改密码弹窗
+const closeChangePassword = () => {
+  showChangePassword.value = false
+  // 重置表单
+  changePasswordForm.value = {
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  }
+}
+
+// 修改密码
+const changePassword = async () => {
+  // 验证表单
+  if (!changePasswordForm.value.oldPassword || 
+      !changePasswordForm.value.newPassword || 
+      !changePasswordForm.value.confirmPassword) {
+    alert('请填写所有字段')
+    return
+  }
+  
+  if (changePasswordForm.value.newPassword !== changePasswordForm.value.confirmPassword) {
+    alert('新密码和确认密码不一致')
+    return
+  }
+  
+  if (changePasswordForm.value.newPassword.length < 6) {
+    alert('新密码长度至少为6位')
+    return
+  }
+  
+  isChangingPassword.value = true
+  
+  try {
+    const response = await apiService.post('/auth/change-password', {
+      old_password: changePasswordForm.value.oldPassword,
+      new_password: changePasswordForm.value.newPassword
+    })
+    
+    // 显示成功提示
+    alert('密码修改成功！')
+    closeChangePassword()
+  } catch (error) {
+    console.error('修改密码失败:', error)
+    alert('修改密码失败，请检查旧密码是否正确')
+  } finally {
+    isChangingPassword.value = false
+  }
+}
+
 // 处理头像上传
 const handleAvatarUpload = (event) => {
   const file = event.target.files[0]
@@ -394,14 +519,36 @@ const updateProfile = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   const inputElement = document.getElementById('message-input')
   if (inputElement) {
     inputElement.focus()
   }
   scrollToBottom()
   document.documentElement.setAttribute('data-theme', theme.value)
-  fetchUserInfo()
+  await fetchUserInfo()
+  // 初始化本地欢迎消息，不创建会话
+  let welcomeMessage = '你好！我是学生智能服务助手，有什么可以帮助你的吗？'
+  if (userInfo.value) {
+    const { full_name, username, student_id } = userInfo.value
+    welcomeMessage = '你好！'
+    if (full_name) {
+      welcomeMessage += full_name
+    } else if (username) {
+      welcomeMessage += username
+    }
+    if (student_id) {
+      welcomeMessage += `（学号：${student_id}）`
+    }
+    welcomeMessage += '，我是学生智能服务助手，有什么可以帮助你的吗？'
+  }
+  messages.value = [{
+    id: 1,
+    content: welcomeMessage,
+    sender: 'ai',
+    agentType: 'general',
+    timestamp: new Date().toLocaleTimeString()
+  }]
 })
 </script>
 
@@ -487,6 +634,7 @@ onMounted(() => {
           <button class="menu-btn" @click="toggleMenu">•••</button>
           <!-- 下拉菜单 -->
           <div v-if="showMenu" class="dropdown-menu">
+            <div class="dropdown-item" @click="toggleChangePassword">修改密码</div>
             <div class="dropdown-item" @click="handleLogout">退出登录</div>
           </div>
         </div>
@@ -517,7 +665,7 @@ onMounted(() => {
           <div class="message-content-container">
             <!-- AI Message Content -->
             <div v-if="message.sender === 'ai'" class="message-content ai-content">
-              {{ message.content }}
+              <div v-html="parseMarkdown(message.content)"></div>
               <span v-if="message.isStreaming" class="streaming-cursor">|</span>
             </div>
             <!-- User Message Content -->
@@ -633,6 +781,56 @@ onMounted(() => {
               <button type="button" class="cancel-btn" @click="closeEditProfile">取消</button>
               <button type="submit" class="submit-btn" :disabled="isUpdatingProfile">
                 {{ isUpdatingProfile ? '更新中...' : '保存修改' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 修改密码弹窗 -->
+    <div v-if="showChangePassword" class="modal-overlay" @click="closeChangePassword">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>修改密码</h2>
+          <button class="close-btn" @click="closeChangePassword">×</button>
+        </div>
+        <div class="modal-body">
+          <form @submit.prevent="changePassword">
+            <div class="form-group">
+              <label for="oldPassword">旧密码</label>
+              <input 
+                type="password" 
+                id="oldPassword" 
+                v-model="changePasswordForm.oldPassword" 
+                placeholder="请输入旧密码"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="newPassword">新密码</label>
+              <input 
+                type="password" 
+                id="newPassword" 
+                v-model="changePasswordForm.newPassword" 
+                placeholder="请输入新密码（至少6位）"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="confirmPassword">确认新密码</label>
+              <input 
+                type="password" 
+                id="confirmPassword" 
+                v-model="changePasswordForm.confirmPassword" 
+                placeholder="请再次输入新密码"
+                required
+              />
+            </div>
+            <div class="form-actions">
+              <button type="button" class="cancel-btn" @click="closeChangePassword">取消</button>
+              <button type="submit" class="submit-btn" :disabled="isChangingPassword">
+                {{ isChangingPassword ? '修改中...' : '修改密码' }}
               </button>
             </div>
           </form>
@@ -1595,6 +1793,110 @@ body {
   margin-left: 2px;
   color: #22d3ee;
   font-weight: bold;
+}
+
+/* Markdown 样式 */
+.ai-content h1, .ai-content h2, .ai-content h3, .ai-content h4, .ai-content h5, .ai-content h6 {
+  color: #ffffff;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+.ai-content h1 {
+  font-size: 1.8em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.3em;
+}
+
+.ai-content h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.3em;
+}
+
+.ai-content h3 {
+  font-size: 1.2em;
+}
+
+.ai-content ul, .ai-content ol {
+  margin-left: 2em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.ai-content li {
+  margin-bottom: 0.3em;
+}
+
+.ai-content code {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+  color: #f8fafc;
+}
+
+.ai-content pre {
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.ai-content pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.ai-content a {
+  color: #38bdf8;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.ai-content a:hover {
+  color: #22d3ee;
+  text-decoration: underline;
+}
+
+.ai-content blockquote {
+  border-left: 4px solid #4f46e5;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.ai-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.ai-content th, .ai-content td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5em;
+  text-align: left;
+}
+
+.ai-content th {
+  background-color: rgba(79, 70, 229, 0.1);
+  font-weight: 600;
+}
+
+.ai-content tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.ai-content hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 2em 0;
 }
 
 /* 响应式设计 */

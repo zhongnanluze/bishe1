@@ -213,7 +213,9 @@ class StudentAffairsAgent(BaseAgent):
         messages = [SystemMessage(content=system_prompt)]
         
         # 添加历史对话（使用传递的context中的历史记录）
-        conversation_history = context.get("history", []) if context else []
+        conversation_history = []
+        if context and hasattr(context, 'get'):
+            conversation_history = context.get("history", [])
         for hist in conversation_history:
             if hist["role"] == "user":
                 messages.append(HumanMessage(content=hist["content"]))
@@ -238,8 +240,11 @@ class StudentAffairsAgent(BaseAgent):
                     # 找到对应的工具并执行
                     for tool_func in self.tools:
                         if tool_func.name == tool_name:
-                            result = tool_func.invoke(tool_call)
-                            tool_results.append(f"【{tool_name}】\n{result}")
+                            result = tool_func.invoke(tool_args)
+                            # 处理 ToolMessage 对象
+                            if hasattr(result, 'content'):
+                                result = result.content
+                            tool_results.append(f"【{tool_name}】\n{str(result)}")
                             break
                 
                 # 构建最终响应

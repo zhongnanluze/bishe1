@@ -47,13 +47,14 @@ class SessionManager:
         async with AsyncSessionLocal() as session:
             return session
     
-    async def create_session(self, user_id: Optional[int] = None, topic: Optional[str] = None) -> str:
+    async def create_session(self, user_id: Optional[int] = None, topic: Optional[str] = None, user_info: Optional[dict] = None) -> str:
         """
         创建新会话
         
         Args:
             user_id: 用户ID（可选）
             topic: 对话主题（可选）
+            user_info: 用户信息（可选，包含姓名、学号等）
             
         Returns:
             str: 会话ID
@@ -77,6 +78,28 @@ class SessionManager:
                 db.add(new_session)
                 await db.commit()
                 await db.refresh(new_session)
+                
+                # 生成个性化欢迎消息
+                welcome_message = "你好！我是学生智能服务助手，有什么可以帮助你的吗？"
+                if user_info:
+                    full_name = user_info.get("full_name") or user_info.get("username")
+                    student_id = user_info.get("student_id")
+                    if full_name:
+                        welcome_message = f"你好！{full_name}"
+                        if student_id:
+                            welcome_message += f"（学号：{student_id}）"
+                        welcome_message += "，我是学生智能服务助手，有什么可以帮助你的吗？"
+                
+                # 添加欢迎消息到数据库
+                new_chat = ChatHistory(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role='assistant',
+                    content=welcome_message,
+                    agent_type='general'
+                )
+                db.add(new_chat)
+                await db.commit()
             except Exception as e:
                 await db.rollback()
                 raise e
@@ -163,8 +186,7 @@ class SessionManager:
                     select(SessionModel).where(
                         and_(
                             SessionModel.session_id == session_id,
-                            SessionModel.is_active == True,
-                            SessionModel.expires_at > datetime.now()
+                            SessionModel.is_active == True
                         )
                     )
                 )
@@ -297,6 +319,10 @@ class SessionManager:
         Returns:
             bool: 是否删除成功
         """
+        # 验证会话ID
+        if not session_id or not isinstance(session_id, str):
+            return False
+        
         async with AsyncSessionLocal() as db:
             try:
                 # 检查会话是否存在

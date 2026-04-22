@@ -85,7 +85,8 @@ async def stream_response(
     message: str,
     session_id: str,
     agent_type: AgentType,
-    conversation_history: list
+    conversation_history: list,
+    user_info: Optional[dict] = None
 ) -> AsyncGenerator[str, None]:
     """
     流式生成响应
@@ -133,7 +134,7 @@ async def stream_response(
             agent_response = await agent.process(
                 message=message,
                 session_id=session_id,
-                context={"history": conversation_history}
+                context={"history": conversation_history, "user_info": user_info}
             )
             response_content = agent_response.content
             agent_type_str = agent_response.agent_type
@@ -207,12 +208,12 @@ async def chat(request: ChatRequest, current_user: Optional[User] = Depends(get_
         session_id = request.session_id
         user_id = current_user.id if current_user else None
         if not session_id:
-            session_id = await session_manager.create_session(user_id=user_id)
+            session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
         else:
             session = await session_manager.get_session(session_id)
             if not session:
                 # 会话不存在，创建新会话
-                session_id = await session_manager.create_session(user_id=user_id)
+                session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
         
         # 2. 获取对话历史
         conversation_history = await session_manager.get_conversation_history(session_id)
@@ -220,7 +221,18 @@ async def chat(request: ChatRequest, current_user: Optional[User] = Depends(get_
         # 3. 路由决策 - 选择智能体
         agent_type = await router.route(request.message, conversation_history)
         
-        # 4. 获取对应的智能体
+        # 4. 准备用户信息
+        user_info = None
+        if current_user:
+            user_info = {
+                "id": current_user.id,
+                "username": current_user.username,
+                "full_name": current_user.full_name,
+                "student_id": current_user.student_id,
+                "email": current_user.email
+            }
+        
+        # 5. 获取对应的智能体
         agent = AGENTS.get(agent_type)
         
         if not agent:
@@ -233,7 +245,7 @@ async def chat(request: ChatRequest, current_user: Optional[User] = Depends(get_
             agent_response = await agent.process(
                 message=request.message,
                 session_id=session_id,
-                context={"history": conversation_history}
+                context={"history": conversation_history, "user_info": user_info}
             )
             response_content = agent_response.content
             agent_type_str = agent_response.agent_type
@@ -263,21 +275,32 @@ async def chat_stream(request: ChatRequest, current_user: Optional[User] = Depen
     使用Server-Sent Events (SSE)实现流式输出
     """
     try:
-        # 1. 获取或创建会话
+        # 1. 准备用户信息
+        user_info = None
+        if current_user:
+            user_info = {
+                "id": current_user.id,
+                "username": current_user.username,
+                "full_name": current_user.full_name,
+                "student_id": current_user.student_id,
+                "email": current_user.email
+            }
+        
+        # 2. 获取或创建会话
         session_id = request.session_id
         user_id = current_user.id if current_user else None
         if not session_id:
-            session_id = await session_manager.create_session(user_id=user_id)
+            session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
         else:
             session = await session_manager.get_session(session_id)
             if not session:
                 # 会话不存在，创建新会话
-                session_id = await session_manager.create_session(user_id=user_id)
+                session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
         
-        # 2. 获取对话历史
+        # 3. 获取对话历史
         conversation_history = await session_manager.get_conversation_history(session_id)
         
-        # 3. 路由决策 - 选择智能体
+        # 4. 路由决策 - 选择智能体
         agent_type = await router.route(request.message, conversation_history)
         
         # 4. 返回流式响应
@@ -286,7 +309,8 @@ async def chat_stream(request: ChatRequest, current_user: Optional[User] = Depen
                 message=request.message,
                 session_id=session_id,
                 agent_type=agent_type,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                user_info=user_info
             ),
             media_type="text/event-stream",
             headers={
@@ -391,8 +415,26 @@ async def delete_session(session_id: str):
     return {"message": "会话已删除", "session_id": session_id}
 
 
+class CreateSessionRequest(BaseModel):
+    """创建会话请求模型"""
+    user_info: Optional[dict] = None
+
+
+@app.post("/api/session")
+async def create_session(request: CreateSessionRequest, current_user: Optional[User] = Depends(get_current_user)):
+    """
+    创建新会话
+    """
+    try:
+        user_id = current_user.id if current_user else None
+        session_id = await session_manager.create_session(user_id=user_id, user_info=request.user_info)
+        return {"session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}")
+
+
 @app.get("/api/sessions")
-async def get_user_sessions(current_user: User = Depends(get_current_user)):
+async def get_user_sessions(current_user: Optional[User] = Depends(get_current_user)):
     """
     获取用户的会话列表
     
@@ -400,6 +442,8 @@ async def get_user_sessions(current_user: User = Depends(get_current_user)):
         List[SessionInfo]: 会话列表
     """
     try:
+        if not current_user:
+            return []
         sessions = await session_manager.get_user_sessions(current_user.id)
         return sessions
     except Exception as e:

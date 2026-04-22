@@ -19,7 +19,8 @@ from auth_models import (
     TokenResponse,
     UserInfoResponse,
     UserProfileUpdateRequest,
-    AuthResponse
+    AuthResponse,
+    CurrentUser
 )
 from auth_utils import (
     get_password_hash,
@@ -356,7 +357,7 @@ async def update_user_profile(
 @router.post("/change-password", response_model=AuthResponse, status_code=status.HTTP_200_OK)
 async def change_password(
     password_data: PasswordChangeRequest,
-    current_user: User = Depends(get_current_active_user),
+    current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -368,15 +369,25 @@ async def change_password(
     - **new_password**: 新密码（至少6位）
     """
     try:
+        # 从数据库中查询用户对象
+        result = await db.execute(select(User).where(User.id == current_user.id))
+        db_user = result.scalar_one_or_none()
+        
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="用户不存在"
+            )
+        
         # 验证旧密码
-        if not verify_password(password_data.old_password, current_user.password_hash):
+        if not verify_password(password_data.old_password, db_user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="旧密码错误"
             )
         
         # 检查新旧密码是否相同
-        if verify_password(password_data.new_password, current_user.password_hash):
+        if verify_password(password_data.new_password, db_user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="新密码不能与旧密码相同"
