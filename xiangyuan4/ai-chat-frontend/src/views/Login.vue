@@ -51,8 +51,8 @@ const handleLogin = async () => {
         console.log('用户信息:', userInfo)
         
         if (userInfo.is_admin) {
-          console.log('管理员登录，跳转到知识库维护页面')
-          router.push('/knowledge-base')
+          console.log('管理员登录，跳转到管理后台')
+          router.push('/admin')
         } else {
           console.log('普通用户登录，跳转到聊天页面')
           router.push('/chat')

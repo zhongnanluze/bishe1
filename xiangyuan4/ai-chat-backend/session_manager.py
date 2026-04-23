@@ -96,7 +96,7 @@ class SessionManager:
                     user_id=user_id,
                     role='assistant',
                     content=welcome_message,
-                    agent_type='general'
+                    agent_type='chat'
                 )
                 db.add(new_chat)
                 await db.commit()

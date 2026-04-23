@@ -140,8 +140,9 @@ class ApiService {
   }
 
   // 知识库相关方法
-  async getKnowledgeBase() {
-    return this.get('/knowledge-base')
+  async getKnowledgeBase(agentType = null) {
+    const params = agentType ? { agent_type: agentType } : {}
+    return this.get('/knowledge-base', params)
   }
 
   async addKnowledgeBaseItem(item) {

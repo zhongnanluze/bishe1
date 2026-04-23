@@ -110,7 +110,7 @@ class RAGService:
 
         return [c for c in paragraphs if c.strip()]
 
-    async def add_document(self, doc_id: str, title: str, content: str, category: Optional[str] = None):
+    async def add_document(self, doc_id: str, title: str, content: str, category: Optional[str] = None, agent_type: Optional[str] = None):
         """添加文档到向量库"""
         chunks = self._chunk_text(content)
         if not chunks:
@@ -125,6 +125,7 @@ class RAGService:
             "original_id": str(doc_id),
             "title": title,
             "category": category or "",
+            "agent_type": agent_type or "",
             "chunk_index": i
         } for i in range(len(chunks))]
 
@@ -136,8 +137,14 @@ class RAGService:
             metadatas=metadatas
         )
 
-    async def search(self, query: str, top_k: int = 3) -> List[Dict]:
-        """语义搜索"""
+    async def search(self, query: str, top_k: int = 3, agent_type: Optional[str] = None) -> List[Dict]:
+        """语义搜索
+        
+        Args:
+            query: 查询语句
+            top_k: 返回结果数量
+            agent_type: 按智能体类型过滤（可选）
+        """
         if not query or not query.strip():
             return []
 
@@ -146,10 +153,16 @@ class RAGService:
         )
         query_embedding = query_embedding.tolist()
 
+        # 构建过滤条件
+        where_filter = None
+        if agent_type:
+            where_filter = {"agent_type": agent_type}
+
         results = await asyncio.to_thread(
             self.collection.query,
             query_embeddings=query_embedding,
             n_results=top_k,
+            where=where_filter,
             include=["documents", "metadatas", "distances"]
         )
 
@@ -161,6 +174,7 @@ class RAGService:
                     "content": results["documents"][0][i],
                     "title": results["metadatas"][0][i].get("title", ""),
                     "category": results["metadatas"][0][i].get("category", ""),
+                    "agent_type": results["metadatas"][0][i].get("agent_type", ""),
                     "distance": distance,
                     "similarity": 1 - distance
                 })
@@ -201,5 +215,6 @@ class RAGService:
                 doc_id=str(doc["id"]),
                 title=doc.get("title", ""),
                 content=doc.get("content", ""),
-                category=doc.get("category")
+                category=doc.get("category"),
+                agent_type=doc.get("agent_type")
             )

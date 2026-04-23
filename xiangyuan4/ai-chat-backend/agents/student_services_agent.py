@@ -1,5 +1,5 @@
 """
-学生事务智能体
+学生办事智能体
 处理：证件补办、学费缴纳、饭卡充值、办事流程查询
 """
 
@@ -27,7 +27,6 @@ def replace_id_card(student_id: str, id_card_type: str, reason: str) -> str:
         id_card_type: 证件类型（校园卡/学生证/身份证）
         reason: 补办原因
     """
-    # 模拟办理流程
     return f"【证件补办申请已提交】\n学号：{student_id}\n证件类型：{id_card_type}\n原因：{reason}\n\n办理进度：审核中\n预计完成时间：3-5个工作日\n请携带身份证到学生事务中心领取新证。"
 
 
@@ -42,7 +41,6 @@ def pay_tuition(student_id: str, semester: str, amount: float, payment_method: s
         amount: 金额（元）
         payment_method: 支付方式（微信支付/支付宝/银行卡）
     """
-    # 模拟缴费流程
     return f"【学费缴纳成功】\n学号：{student_id}\n学期：{semester}\n金额：¥{amount}\n支付方式：{payment_method}\n\n交易单号：TXN{hash(student_id + semester) % 100000000:08d}\n缴费时间：2024年\n请保存好缴费凭证。"
 
 
@@ -56,7 +54,6 @@ def recharge_meal_card(student_id: str, amount: float, payment_method: str) -> s
         amount: 充值金额（元）
         payment_method: 支付方式（微信支付/支付宝/银行卡）
     """
-    # 模拟充值流程
     return f"【饭卡充值成功】\n学号：{student_id}\n充值金额：¥{amount}\n支付方式：{payment_method}\n\n当前余额：¥{amount + 50:.2f}\n充值时间：2024年\n可在食堂刷卡机或手机APP查询余额。"
 
 
@@ -68,7 +65,6 @@ def query_process(affair_type: str) -> str:
     Args:
         affair_type: 事务类型（如：请假/休学/转专业/奖学金申请等）
     """
-    # 流程知识库
     processes = {
         "请假": """
 【请假流程】
@@ -131,7 +127,10 @@ def query_process(affair_type: str) -> str:
         """
     }
     
-    return processes.get(affair_type, f"抱歉，暂时没有找到【{affair_type}】的办理流程。请咨询学生事务中心：电话 010-12345678")
+    result = processes.get(affair_type)
+    if result:
+        return result + "\n\n⚠️ 以上流程仅供参考，具体要求、材料和时限请以学校最新规定或学生事务中心告知为准。"
+    return f"抱歉，暂时没有找到【{affair_type}】的办理流程。建议直接咨询学生事务中心：电话 010-12345678，或前往学生活动中心一楼现场咨询。"
 
 
 @tool
@@ -158,13 +157,13 @@ def query_affairs_center_info() -> str:
     """
 
 
-class StudentAffairsAgent(BaseAgent):
-    """学生事务智能体"""
+class StudentServicesAgent(BaseAgent):
+    """学生办事智能体"""
     
     def __init__(self):
         super().__init__(
-            name="学生事务智能体",
-            description="处理学生事务相关需求，包括证件补办、学费缴纳、饭卡充值、办事流程查询等"
+            name="学生办事智能体",
+            description="处理学生办事相关需求，包括证件补办、学费缴纳、饭卡充值、办事流程查询等"
         )
         self.llm = ChatDeepSeek(
             model="deepseek-chat",
@@ -173,7 +172,6 @@ class StudentAffairsAgent(BaseAgent):
             temperature=0.3,
             max_tokens=2048
         )
-        # 绑定工具
         self.tools = [
             replace_id_card,
             pay_tuition,
@@ -186,7 +184,7 @@ class StudentAffairsAgent(BaseAgent):
 
     async def _build_knowledge_context(self, query: str) -> str:
         """检索知识库并格式化上下文"""
-        results = await self.rag_service.search(query, top_k=3)
+        results = await self.rag_service.search(query, top_k=3, agent_type="student_services")
         if not results:
             return ""
         context = "\n\n【知识库参考信息】\n"
@@ -196,10 +194,9 @@ class StudentAffairsAgent(BaseAgent):
         return context
     
     async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
-        """处理学生事务相关请求"""
+        """处理学生办事相关请求"""
         
-        # 系统提示词
-        system_prompt = """你是文泽奇妙小AI的学生事务助手，一个友善、热情且专业的校园服务专家。你喜欢用轻松愉快的语气与学生交流，让校园生活变得更加便捷。
+        system_prompt = """你是文泽奇妙小AI的学生办事助手，一个友善、热情且专业的校园服务专家。你喜欢用轻松愉快的语气与学生交流，让校园生活变得更加便捷。
 
 你的职责：
 - 证件补办：校园卡、学生证等证件的补办申请，全程耐心指导
@@ -221,18 +218,17 @@ class StudentAffairsAgent(BaseAgent):
 - 及时更新办理进度和相关信息
 - 遇到问题时积极协助解决
 - 当用户询问校园生活信息（图书馆、食堂、宿舍、校医院等）时，请优先参考知识库信息作答
-- 不要编造你不确定的信息，优先使用知识库提供的内容
+- **严禁编造任何信息**：如果知识库或工具中没有相关信息，必须明确告知用户"这个问题我暂时无法确认，建议咨询学生事务中心或查阅学校官网"
+- 不要猜测、不要推断、不要使用未经验证的信息
+- 对于办事流程、地点、时间、费用等具体信息，只能使用工具函数返回的结果或知识库内容，不能自行编造
 
 请使用提供的工具函数来帮助学生完成事务办理，让学生感受到校园服务的温暖和便捷！"""
 
-        # 检索知识库并注入上下文
         knowledge_context = await self._build_knowledge_context(message)
         full_prompt = system_prompt + knowledge_context
 
-        # 构建消息列表
         messages = [SystemMessage(content=full_prompt)]
         
-        # 添加历史对话（使用传递的context中的历史记录）
         conversation_history = []
         if context and hasattr(context, 'get'):
             conversation_history = context.get("history", [])
@@ -242,26 +238,20 @@ class StudentAffairsAgent(BaseAgent):
             else:
                 messages.append(AIMessage(content=hist["content"]))
         
-        # 添加当前消息
         messages.append(HumanMessage(content=message))
         
         try:
-            # 调用LLM（使用异步方法）
             response = await self.llm_with_tools.ainvoke(messages)
             
-            # 处理工具调用
             if response.tool_calls:
-                # 执行工具调用
                 tool_messages = []
                 for tool_call in response.tool_calls:
                     tool_name = tool_call['name']
                     tool_args = tool_call['args']
                     
-                    # 找到对应的工具并执行
                     for tool_func in self.tools:
                         if tool_func.name == tool_name:
                             result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            # 处理 ToolMessage 对象
                             if hasattr(result, 'content'):
                                 result = result.content
                             tool_messages.append(ToolMessage(
@@ -270,7 +260,6 @@ class StudentAffairsAgent(BaseAgent):
                             ))
                             break
                 
-                # 直接拼接工具结果返回，避免二次 LLM 调用带来的延迟和数据丢失
                 tool_results = []
                 for tm in tool_messages:
                     tool_results.append(tm.content)
@@ -282,21 +271,21 @@ class StudentAffairsAgent(BaseAgent):
             
             return AgentResponse(
                 content=final_content,
-                agent_type="student_affairs",
+                agent_type="student_services",
                 action_taken=action_taken
             )
 
         except Exception as e:
             return AgentResponse(
                 content=f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系学生事务中心。",
-                agent_type="student_affairs",
+                agent_type="student_services",
                 action_taken="error"
             )
 
     async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
-        """流式处理学生事务相关请求，边生成边输出"""
+        """流式处理学生办事相关请求，边生成边输出"""
         
-        system_prompt = """你是文泽奇妙小AI的学生事务助手，一个友善、热情且专业的校园服务专家。你喜欢用轻松愉快的语气与学生交流，让校园生活变得更加便捷。
+        system_prompt = """你是文泽奇妙小AI的学生办事助手，一个友善、热情且专业的校园服务专家。你喜欢用轻松愉快的语气与学生交流，让校园生活变得更加便捷。
 
 你的职责：
 - 证件补办：校园卡、学生证等证件的补办申请，全程耐心指导
@@ -322,7 +311,6 @@ class StudentAffairsAgent(BaseAgent):
 
 请使用提供的工具函数来帮助学生完成事务办理，让学生感受到校园服务的温暖和便捷！"""
 
-        # 检索知识库并注入上下文
         knowledge_context = await self._build_knowledge_context(message)
         full_prompt = system_prompt + knowledge_context
 
@@ -340,12 +328,9 @@ class StudentAffairsAgent(BaseAgent):
         messages.append(HumanMessage(content=message))
         
         try:
-            # 调用LLM（使用异步方法）
             response = await self.llm_with_tools.ainvoke(messages)
             
-            # 处理工具调用
             if response.tool_calls:
-                # 执行工具调用
                 tool_messages = []
                 for tool_call in response.tool_calls:
                     tool_name = tool_call['name']
@@ -362,7 +347,6 @@ class StudentAffairsAgent(BaseAgent):
                             ))
                             break
                 
-                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（使用异步方法）
                 final_messages = messages + [response] + tool_messages
                 final_response = await self.llm.ainvoke(final_messages)
                 final_content = final_response.content
@@ -371,16 +355,14 @@ class StudentAffairsAgent(BaseAgent):
                 final_content = response.content
                 action_taken = None
             
-            # 流式输出内容
             for char in final_content:
                 yield {"type": "content", "content": char}
             
-            # 输出完成信号
             yield {
                 "type": "done",
                 "content": AgentResponse(
                     content=final_content,
-                    agent_type="student_affairs",
+                    agent_type="student_services",
                     action_taken=action_taken
                 )
             }
@@ -388,4 +370,4 @@ class StudentAffairsAgent(BaseAgent):
         except Exception as e:
             error_message = f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系学生事务中心。"
             yield {"type": "content", "content": error_message}
-            yield {"type": "done", "content": AgentResponse(content=error_message, agent_type="student_affairs", action_taken="error")}
+            yield {"type": "done", "content": AgentResponse(content=error_message, agent_type="student_services", action_taken="error")}

@@ -9,6 +9,9 @@ const Chat = () => import('../views/Chat.vue')
 const Debug = () => import('../views/Debug.vue')
 const KnowledgeBase = () => import('../views/KnowledgeBase.vue')
 
+const Admin = () => import('../views/Admin.vue')
+const EasyLogin = () => import('../views/EasyLogin.vue')
+
 const routes = [
   {
     path: '/',
@@ -52,6 +55,23 @@ const routes = [
     }
   },
   {
+    path: '/admin',
+    name: 'Admin',
+    component: Admin,
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true
+    }
+  },
+  {
+    path: '/easylogin',
+    name: 'EasyLogin',
+    component: EasyLogin,
+    meta: {
+      requiresGuest: true
+    }
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/debug'
   }
@@ -82,8 +102,16 @@ router.beforeEach(async (to, from, next) => {
     } else {
       console.log('-> 已登录，验证 token 有效性')
       try {
-        await authService.getCurrentUser()
+        const user = await authService.getCurrentUser()
         console.log('-> Token 有效，继续')
+        // 检查是否需要管理员权限
+        if (to.matched.some(record => record.meta.requiresAdmin)) {
+          if (!user.is_admin) {
+            console.log('-> 不是管理员，跳转到聊天页面')
+            next({ name: 'Chat' })
+            return
+          }
+        }
         next()
       } catch (error) {
         console.log('-> Token 无效，清除登录状态并跳转到登录页面')

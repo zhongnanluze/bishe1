@@ -10,14 +10,14 @@ const messages = ref([
     id: 1,
     content: '你好！我是学生智能服务助手，有什么可以帮助你的吗？',
     sender: 'ai',
-    agentType: 'general',
+    agentType: 'chat',
     timestamp: new Date().toLocaleTimeString()
   }
 ])
 const inputMessage = ref('')
 const isLoading = ref(false)
 const sessionId = ref(null)
-const currentAgent = ref('general')
+const currentAgent = ref('chat')
 const showAgentInfo = ref(false)
 const theme = ref('dark') // 固定为深色主题
 const userInfo = ref(null)
@@ -47,25 +47,35 @@ const isChangingPassword = ref(false) // 控制修改密码状态
 const selectedSessionId = ref(null) // 跟踪当前选中的会话ID
 
 const agentsInfo = {
-  general: {
-    name: '通用助手',
-    icon: '🤖',
+  chat: {
+    name: '日常聊天智能体',
+    icon: '💬',
     color: 'var(--primary-color)'
-  },
-  student_affairs: {
-    name: '学生事务智能体',
-    icon: '📋',
-    color: 'var(--secondary-color)'
   },
   academic: {
     name: '学生学业智能体',
     icon: '🎓',
     color: 'var(--accent-color)'
+  },
+  student_services: {
+    name: '学生办事智能体',
+    icon: '📋',
+    color: 'var(--secondary-color)'
+  },
+  psychology: {
+    name: '心理咨询智能体',
+    icon: '🧡',
+    color: '#f472b6'
+  },
+  policy: {
+    name: '制度查询智能体',
+    icon: '📜',
+    color: '#fbbf24'
   }
 }
 
 const currentAgentInfo = computed(() => {
-  return agentsInfo[currentAgent.value] || agentsInfo.general
+  return agentsInfo[currentAgent.value] || agentsInfo.chat
 })
 
 // 解析Markdown内容
@@ -102,7 +112,7 @@ const sendMessage = async () => {
       id: Date.now() + 1,
       content: '抱歉，暂时无法响应，请稍后再试。',
       sender: 'ai',
-      agentType: 'general',
+      agentType: 'chat',
       timestamp: new Date().toLocaleTimeString()
     }
     messages.value.push(errorMessage)
@@ -153,8 +163,8 @@ const sendStreamingMessage = async (message) => {
             scrollToBottom()
           } else if (data.type === 'done') {
             tempMessage.isStreaming = false
-            tempMessage.agentType = data.agent_type || 'general'
-            currentAgent.value = data.agent_type || 'general'
+            tempMessage.agentType = data.agent_type || 'chat'
+            currentAgent.value = data.agent_type || 'chat'
             if (data.session_id) {
               sessionId.value = data.session_id
             }
@@ -215,12 +225,12 @@ const clearMessages = () => {
     id: Date.now(),
     content: welcomeMessage,
     sender: 'ai',
-    agentType: 'general',
+    agentType: 'chat',
     timestamp: new Date().toLocaleTimeString()
   }]
   sessionId.value = null
   selectedSessionId.value = null // 重置选中的会话ID
-  currentAgent.value = 'general'
+  currentAgent.value = 'chat'
 }
 
 const toggleAgentInfo = () => {
@@ -294,7 +304,7 @@ const fetchSessions = async () => {
 const loadSession = async (session) => {
   sessionId.value = session.session_id
   selectedSessionId.value = session.session_id // 更新选中的会话ID
-  currentAgent.value = session.current_agent || 'general'
+  currentAgent.value = session.current_agent || 'chat'
   currentSessionCreatedAt.value = session.created_at
   
   try {
@@ -306,7 +316,7 @@ const loadSession = async (session) => {
       id: index + 1,
       content: msg.content,
       sender: msg.role === 'user' ? 'user' : 'ai',
-      agentType: msg.agent_type || 'general',
+      agentType: msg.agent_type || 'chat',
       timestamp: new Date(msg.timestamp).toLocaleTimeString()
     }))
     
@@ -510,7 +520,7 @@ onMounted(async () => {
     id: 1,
     content: welcomeMessage,
     sender: 'ai',
-    agentType: 'general',
+    agentType: 'chat',
     timestamp: new Date().toLocaleTimeString()
   }]
 })

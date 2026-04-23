@@ -101,7 +101,7 @@ def query_course_schedule(student_id: str, xn: str = None, xq: int = None) -> st
             course = COURSES_DB[code]
             courses_info.append(f"📚 {course['name']} ({code})\n   ⏰ {course['time']}\n   📍 {course['location']}\n   👨‍🏫 {course['teacher']}\n   📝 {course['credits']}学分")
     
-    return f"【{student_id} 的课表】\n\n" + "\n\n".join(courses_info)
+    return f"【{student_id} 的课表】\n\n" + "\n\n".join(courses_info) + "\n\n⚠️ 以上为模拟示例数据，请以教务系统实际查询结果为准。"
 
 
 @tool
@@ -332,7 +332,7 @@ def calculate_gpa(student_id: str) -> str:
     
     gpa = total_gpa_points / total_credits if total_credits > 0 else 0
     
-    return f"【{student_id} 学业统计】\n\n总学分：{total_credits}\n平均GPA：{gpa:.2f}\n\nGPA等级：\n- 4.0：优秀 (90-100分)\n- 3.7：良好 (85-89分)\n- 3.3：中等 (82-84分)\n- 3.0：及格 (78-81分)\n- 2.7：及格 (75-77分)"
+    return f"【{student_id} 学业统计】\n\n总学分：{total_credits}\n平均GPA：{gpa:.2f}\n\nGPA等级：\n- 4.0：优秀 (90-100分)\n- 3.7：良好 (85-89分)\n- 3.3：中等 (82-84分)\n- 3.0：及格 (78-81分)\n- 2.7：及格 (75-77分)\n\n⚠️ 以上为模拟示例数据，请以教务系统实际查询结果为准。"
 
 
 class AcademicAgent(BaseAgent):
@@ -365,7 +365,7 @@ class AcademicAgent(BaseAgent):
 
     async def _build_knowledge_context(self, query: str) -> str:
         """检索知识库并格式化上下文"""
-        results = await self.rag_service.search(query, top_k=3)
+        results = await self.rag_service.search(query, top_k=3, agent_type="academic")
         if not results:
             return ""
         context = "\n\n【知识库参考信息】\n"
@@ -399,7 +399,8 @@ class AcademicAgent(BaseAgent):
 - 如已提供学号，直接使用该学号进行查询
 - 回复中适当使用表情符号，让语气更友好
 - 当用户询问学业政策、规章制度等信息时，请优先参考知识库内容作答
-- 不要编造你不确定的信息，优先使用知识库提供的内容
+- **严禁编造任何信息**：如果知识库或工具中没有相关信息，必须明确告知用户"这个问题我暂时无法确认，建议咨询教务处或查阅学校官网"
+- 不要猜测、不要推断、不要使用未经验证的信息
 
 特别注意：
 - 当用户提到"大一"、"大二"、"大三"、"大四"时，需要将其转换为具体的学期参数：
@@ -417,6 +418,8 @@ class AcademicAgent(BaseAgent):
 
         # 检索知识库并注入上下文
         knowledge_context = await self._build_knowledge_context(message)
+        if not knowledge_context:
+            knowledge_context = "\n\n【知识库检索结果】未找到与该问题相关的知识库内容。请注意：如果没有可靠信息来源，请不要编造答案。\n"
         full_prompt = system_prompt + knowledge_context
 
         # 构建消息列表

@@ -14,6 +14,27 @@ class AuthService {
     return truncated
   }
 
+  // 免密快捷登录（开发测试用）
+  async easyLogin(username) {
+    const response = await fetch(`${API_BASE_URL}/easy-login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        password: ''
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || '快捷登录失败')
+    }
+
+    return await response.json()
+  }
+
   // 登录
   async login(username, password) {
     // 自动截断密码到72字节

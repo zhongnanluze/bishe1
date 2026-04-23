@@ -132,6 +132,63 @@ async def register(
         )
 
 
+@router.post("/easy-login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+async def easy_login(
+    login_data: UserLoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    免密快捷登录（仅开发测试使用）
+    
+    - **username**: 用户名或邮箱
+    
+    根据用户名直接返回Token，跳过密码校验
+    """
+    try:
+        # 支持用户名或邮箱登录
+        result = await db.execute(
+            select(User).where(
+                (User.username == login_data.username) | (User.email == login_data.username)
+            )
+        )
+        user = result.scalar_one_or_none()
+        
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户不存在",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="用户账号已被禁用"
+            )
+        
+        # 更新最后登录时间
+        await update_last_login(user.id, db)
+        
+        # 生成 Token
+        access_token = create_access_token(user.id, user.username)
+        refresh_token = create_refresh_token(user.id)
+        
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=30 * 60
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"快捷登录失败：{str(e)}"
+        )
+
+
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(
     login_data: UserLoginRequest,

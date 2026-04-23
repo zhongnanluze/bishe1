@@ -1,10 +1,20 @@
 """
 智能体系统模块
-包含：路由器、学生事务智能体、学生学业智能体
+包含：路由器、学生学业智能体、学生办事智能体、心理咨询智能体、制度查询智能体、日常聊天智能体
 """
 
 from .router import AgentRouter
-from .student_affairs_agent import StudentAffairsAgent
 from .academic_agent import AcademicAgent
+from .student_services_agent import StudentServicesAgent
+from .psychology_agent import PsychologyAgent
+from .policy_agent import PolicyAgent
+from .chat_agent import ChatAgent
 
-__all__ = ['AgentRouter', 'StudentAffairsAgent', 'AcademicAgent']
+__all__ = [
+    'AgentRouter',
+    'AcademicAgent',
+    'StudentServicesAgent',
+    'PsychologyAgent',
+    'PolicyAgent',
+    'ChatAgent'
+]

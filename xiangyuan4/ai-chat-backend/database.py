@@ -99,8 +99,23 @@ class KnowledgeBaseModel(Base):
     title = Column(String(255), nullable=False, comment="知识标题")
     content = Column(Text, nullable=False, comment="知识内容")
     category = Column(String(100), nullable=True, comment="知识分类")
+    agent_type = Column(String(50), nullable=True, comment="所属智能体类型：academic/student_services/psychology/policy/chat")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+
+class UsageLog(Base):
+    """API调用用量统计表"""
+    __tablename__ = "usage_logs"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(Integer, nullable=True, comment="用户ID")
+    session_id = Column(String(100), nullable=True, comment="会话ID")
+    agent_type = Column(String(50), nullable=False, comment="智能体类型")
+    prompt_tokens = Column(Integer, default=0, comment="Prompt token数")
+    completion_tokens = Column(Integer, default=0, comment="Completion token数")
+    total_tokens = Column(Integer, default=0, comment="总token数")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
 
 
 # ============ 数据库操作辅助函数 ============

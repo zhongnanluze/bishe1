@@ -2,7 +2,7 @@
 知识库路由（RAG 版本）
 支持：增删改查 + 语义搜索 + 向量索引管理
 """
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete as sql_delete
 from typing import Optional
@@ -39,12 +39,14 @@ class KnowledgeBaseItemCreate(BaseModel):
     title: str
     content: str
     category: Optional[str] = None
+    agent_type: Optional[str] = None
 
 
 class KnowledgeBaseItemUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     category: Optional[str] = None
+    agent_type: Optional[str] = None
 
 
 class KnowledgeBaseSearchRequest(BaseModel):
@@ -55,13 +57,15 @@ class KnowledgeBaseSearchRequest(BaseModel):
 # 获取知识库列表
 @router.get("")
 async def get_knowledge_base(
+    agent_type: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_active_user)
 ):
     try:
-        result = await db.execute(
-            select(KnowledgeBaseModel).order_by(KnowledgeBaseModel.updated_at.desc())
-        )
+        query = select(KnowledgeBaseModel).order_by(KnowledgeBaseModel.updated_at.desc())
+        if agent_type:
+            query = query.where(KnowledgeBaseModel.agent_type == agent_type)
+        result = await db.execute(query)
         items = result.scalars().all()
         return [
             {
@@ -69,6 +73,7 @@ async def get_knowledge_base(
                 "title": item.title,
                 "content": item.content,
                 "category": item.category,
+                "agent_type": item.agent_type,
                 "created_at": item.created_at.isoformat() if item.created_at else None,
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None
             }
@@ -89,7 +94,8 @@ async def add_knowledge_base_item(
         new_item = KnowledgeBaseModel(
             title=item.title,
             content=item.content,
-            category=item.category
+            category=item.category,
+            agent_type=item.agent_type
         )
         db.add(new_item)
         await db.commit()
@@ -100,7 +106,8 @@ async def add_knowledge_base_item(
             doc_id=str(new_item.id),
             title=new_item.title,
             content=new_item.content,
-            category=new_item.category
+            category=new_item.category,
+            agent_type=new_item.agent_type
         )
 
         return {
@@ -108,6 +115,7 @@ async def add_knowledge_base_item(
             "title": new_item.title,
             "content": new_item.content,
             "category": new_item.category,
+            "agent_type": new_item.agent_type,
             "created_at": new_item.created_at.isoformat() if new_item.created_at else None,
             "updated_at": new_item.updated_at.isoformat() if new_item.updated_at else None
         }
@@ -139,19 +147,22 @@ async def update_knowledge_base_item(
             db_item.content = item.content
         if item.category is not None:
             db_item.category = item.category
+        if item.agent_type is not None:
+            db_item.agent_type = item.agent_type
 
         db_item.updated_at = datetime.now()
         await db.commit()
         await db.refresh(db_item)
 
-        # 如果内容或标题变了，重建该文档的向量
-        if item.content is not None or item.title is not None:
+        # 如果内容、标题或智能体类型变了，重建该文档的向量
+        if item.content is not None or item.title is not None or item.agent_type is not None:
             await rag_service.delete_document(str(id))
             await rag_service.add_document(
                 doc_id=str(db_item.id),
                 title=db_item.title,
                 content=db_item.content,
-                category=db_item.category
+                category=db_item.category,
+                agent_type=db_item.agent_type
             )
 
         return {
@@ -159,6 +170,7 @@ async def update_knowledge_base_item(
             "title": db_item.title,
             "content": db_item.content,
             "category": db_item.category,
+            "agent_type": db_item.agent_type,
             "updated_at": db_item.updated_at.isoformat() if db_item.updated_at else None
         }
     except HTTPException:
@@ -202,10 +214,11 @@ async def delete_knowledge_base_item(
 @router.post("/search")
 async def search_knowledge_base(
     request: KnowledgeBaseSearchRequest,
+    agent_type: Optional[str] = None,
     current_user: CurrentUser = Depends(get_current_active_user)
 ):
     try:
-        results = await rag_service.search(request.query, top_k=request.top_k)
+        results = await rag_service.search(request.query, top_k=request.top_k, agent_type=agent_type)
         return {
             "query": request.query,
             "results": results
@@ -229,7 +242,8 @@ async def rebuild_knowledge_base_index(
                 "id": item.id,
                 "title": item.title,
                 "content": item.content,
-                "category": item.category
+                "category": item.category,
+                "agent_type": item.agent_type
             }
             for item in items
         ]
@@ -301,7 +315,8 @@ def _parse_file_content(file: UploadFile, filename: str) -> str:
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_knowledge_base_file(
     file: UploadFile = File(...),
-    category: Optional[str] = None,
+    category: Optional[str] = Form(None),
+    agent_type: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_active_user)
 ):
@@ -340,7 +355,8 @@ async def upload_knowledge_base_file(
         new_item = KnowledgeBaseModel(
             title=title,
             content=content,
-            category=category
+            category=category,
+            agent_type=agent_type
         )
         db.add(new_item)
         await db.commit()
@@ -351,7 +367,8 @@ async def upload_knowledge_base_file(
             doc_id=str(new_item.id),
             title=new_item.title,
             content=new_item.content,
-            category=new_item.category
+            category=new_item.category,
+            agent_type=new_item.agent_type
         )
         
         return {
@@ -359,6 +376,7 @@ async def upload_knowledge_base_file(
             "title": new_item.title,
             "content_preview": content[:200] + ("..." if len(content) > 200 else ""),
             "category": new_item.category,
+            "agent_type": new_item.agent_type,
             "filename": file.filename,
             "created_at": new_item.created_at.isoformat() if new_item.created_at else None
         }

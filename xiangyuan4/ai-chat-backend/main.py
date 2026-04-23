@@ -14,17 +14,23 @@ import json
 
 # 导入智能体模块
 from agents.router import AgentRouter, AgentType
-from agents.student_affairs_agent import StudentAffairsAgent
 from agents.academic_agent import AcademicAgent
+from agents.student_services_agent import StudentServicesAgent
+from agents.psychology_agent import PsychologyAgent
+from agents.policy_agent import PolicyAgent
+from agents.chat_agent import ChatAgent
 from session_manager import session_manager
 
 # 导入认证路由和依赖
 from auth_routes import router as auth_router
 from knowledge_base_routes import router as knowledge_base_router
 from auth_utils import get_current_user
-from database import init_db, User, AsyncSessionLocal, KnowledgeBaseModel
+from database import init_db, User, AsyncSessionLocal, KnowledgeBaseModel, UsageLog
 from rag_service import RAGService
 from sqlalchemy import select
+
+# 导入管理员路由
+from admin_routes import router as admin_router
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -71,14 +77,19 @@ class SessionInfo(BaseModel):
 
 # 初始化智能体
 router = AgentRouter()
-student_affairs_agent = StudentAffairsAgent()
 academic_agent = AcademicAgent()
+student_services_agent = StudentServicesAgent()
+psychology_agent = PsychologyAgent()
+policy_agent = PolicyAgent()
+chat_agent = ChatAgent()
 
 # 智能体映射表
 AGENTS = {
-    AgentType.STUDENT_AFFAIRS: student_affairs_agent,
     AgentType.ACADEMIC: academic_agent,
-    AgentType.GENERAL: student_affairs_agent,  # 兜底，确保通用对话也能继续
+    AgentType.STUDENT_SERVICES: student_services_agent,
+    AgentType.PSYCHOLOGY: psychology_agent,
+    AgentType.POLICY: policy_agent,
+    AgentType.CHAT: chat_agent,
 }
 
 
@@ -104,15 +115,15 @@ async def stream_response(
         str: JSON格式的数据块
     """
     response_content = ""
-    agent_type_str = "general"
+    agent_type_str = "chat"
     action_taken = None
 
     try:
         agent = AGENTS.get(agent_type)
 
         if not agent:
-            response_content = "您好！我是学生智能服务助手。我可以帮您处理：\n\n1. **学生事务**：证件补办、学费缴纳、饭卡充值、办事流程查询\n2. **学业相关**：选课、课表查询、成绩查询、GPA计算\n\n请问有什么可以帮助您的？"
-            agent_type_str = "general"
+            response_content = "您好！我是学生智能服务助手。我可以帮您处理：\n\n1. **学生学业**：选课、课表查询、成绩查询、GPA计算\n2. **学生办事**：证件补办、学费缴纳、饭卡充值、办事流程查询\n3. **心理咨询**：情绪疏导、压力调节、心理咨询预约\n4. **制度查询**：学籍管理、奖助学金、宿舍规定、考试纪律\n5. **日常聊天**：校园生活闲聊、一般性咨询\n\n请问有什么可以帮助您的？"
+            agent_type_str = "chat"
             action_taken = None
 
             for i, char in enumerate(response_content):
@@ -167,6 +178,25 @@ async def stream_response(
 
         await session_manager.add_message(session_id, "user", message)
         await session_manager.add_message(session_id, "assistant", response_content, agent_type_str)
+        
+        # 记录调用用量统计
+        try:
+            async with AsyncSessionLocal() as db:
+                # 使用字符数作为token估算（中文约1:2，英文约1:1，取粗略值）
+                prompt_tokens = max(len(message), 1)
+                completion_tokens = max(len(response_content), 1)
+                usage = UsageLog(
+                    user_id=user_info.get("id") if user_info else None,
+                    session_id=session_id,
+                    agent_type=agent_type_str,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=prompt_tokens + completion_tokens
+                )
+                db.add(usage)
+                await db.commit()
+        except Exception as log_err:
+            print(f"用量记录失败: {log_err}")
 
     except Exception as e:
         error_chunk = {
@@ -321,7 +351,7 @@ async def chat_direct(agent_type: str, request: ChatRequest, current_user: Optio
     直接指定智能体进行对话（非流式）
     
     Args:
-        agent_type: 智能体类型 (student_affairs / academic)
+        agent_type: 智能体类型 (academic / student_services / psychology / policy / chat)
     """
     try:
         # 获取或创建会话
@@ -331,12 +361,21 @@ async def chat_direct(agent_type: str, request: ChatRequest, current_user: Optio
             session_id = await session_manager.create_session(user_id=user_id)
         
         # 根据类型选择智能体
-        if agent_type == "student_affairs":
-            agent = student_affairs_agent
-            agent_type_enum = AgentType.STUDENT_AFFAIRS
-        elif agent_type == "academic":
+        if agent_type == "academic":
             agent = academic_agent
             agent_type_enum = AgentType.ACADEMIC
+        elif agent_type == "student_services":
+            agent = student_services_agent
+            agent_type_enum = AgentType.STUDENT_SERVICES
+        elif agent_type == "psychology":
+            agent = psychology_agent
+            agent_type_enum = AgentType.PSYCHOLOGY
+        elif agent_type == "policy":
+            agent = policy_agent
+            agent_type_enum = AgentType.POLICY
+        elif agent_type == "chat":
+            agent = chat_agent
+            agent_type_enum = AgentType.CHAT
         else:
             raise HTTPException(status_code=400, detail=f"未知的智能体类型: {agent_type}")
         
@@ -447,18 +486,6 @@ async def list_agents():
     return {
         "agents": [
             {
-                "type": "student_affairs",
-                "name": "学生事务智能体",
-                "description": "处理证件补办、学费缴纳、饭卡充值、办事流程查询等",
-                "capabilities": [
-                    "证件补办（校园卡、学生证）",
-                    "学费缴纳",
-                    "饭卡充值",
-                    "办事流程查询",
-                    "学生事务中心信息"
-                ]
-            },
-            {
                 "type": "academic",
                 "name": "学生学业智能体",
                 "description": "处理选课、课表查询、成绩查询、学业规划等",
@@ -469,6 +496,55 @@ async def list_agents():
                     "GPA计算",
                     "学业日历",
                     "课程搜索"
+                ]
+            },
+            {
+                "type": "student_services",
+                "name": "学生办事智能体",
+                "description": "处理证件补办、学费缴纳、饭卡充值、办事流程查询等",
+                "capabilities": [
+                    "证件补办（校园卡、学生证）",
+                    "学费缴纳",
+                    "饭卡充值",
+                    "办事流程查询",
+                    "学生事务中心信息"
+                ]
+            },
+            {
+                "type": "psychology",
+                "name": "心理咨询智能体",
+                "description": "提供心理支持、情绪疏导、心理健康知识和心理咨询预约服务",
+                "capabilities": [
+                    "情绪疏导与倾听",
+                    "心理压力调节建议",
+                    "心理咨询预约信息",
+                    "心理健康知识科普",
+                    "紧急心理危机求助"
+                ]
+            },
+            {
+                "type": "policy",
+                "name": "制度查询智能体",
+                "description": "查询学校各类规章制度、政策文件、管理办法和相关办事部门信息",
+                "capabilities": [
+                    "学籍管理制度",
+                    "奖助学金政策",
+                    "宿舍管理规定",
+                    "考试纪律",
+                    "学位授予条件",
+                    "违纪处分规定"
+                ]
+            },
+            {
+                "type": "chat",
+                "name": "日常聊天智能体",
+                "description": "处理校园生活闲聊、一般性咨询、问候和寒暄",
+                "capabilities": [
+                    "校园生活闲聊",
+                    "一般性问题解答",
+                    "问候和寒暄",
+                    "校园设施位置咨询",
+                    "生活小贴士"
                 ]
             }
         ]
@@ -493,7 +569,8 @@ async def init_rag_index():
                             "id": item.id,
                             "title": item.title,
                             "content": item.content,
-                            "category": item.category
+                            "category": item.category,
+                            "agent_type": item.agent_type
                         }
                         for item in items
                     ]
@@ -531,6 +608,9 @@ async def startup_event():
     # 注册知识库路由
     app.include_router(knowledge_base_router)
 
+    # 注册管理员路由
+    app.include_router(admin_router)
+
     # 初始化 RAG 索引
     await init_rag_index()
 
@@ -544,15 +624,22 @@ async def startup_event():
     print("  - POST /api/auth/login     用户登录")
     print("  - POST /api/auth/refresh   刷新Token")
     print("  - GET  /api/auth/me        获取用户信息")
-    print("  - POST /api/chat          智能路由对话（非流式）")
+    print("  - POST /api/chat           智能路由对话（非流式）")
     print("  - POST /api/chat/stream    智能路由对话（流式）")
-    print("  - POST /api/chat/direct   指定智能体对话")
-    print("  - GET  /api/agents        查看可用智能体")
+    print("  - POST /api/chat/direct    指定智能体对话")
+    print("  - GET  /api/agents         查看可用智能体")
     print("  - GET  /api/knowledge-base 获取知识库列表")
     print("  - POST /api/knowledge-base 添加知识库项")
     print("  - POST /api/knowledge-base/search 语义搜索")
     print("  - DELETE /api/knowledge-base/{id} 删除知识库项")
-    print("  - GET  /docs              API 文档")
+    print("  - GET  /docs               API 文档")
+    print("=" * 50)
+    print("智能体列表:")
+    print("  - academic          学生学业智能体")
+    print("  - student_services  学生办事智能体")
+    print("  - psychology        心理咨询智能体")
+    print("  - policy            制度查询智能体")
+    print("  - chat              日常聊天智能体")
     print("=" * 50)
 
 

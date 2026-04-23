@@ -14,11 +14,25 @@ const vectorStatus = ref({ vector_count: 0, collection: '' })
 const newItem = ref({
   title: '',
   content: '',
-  category: ''
+  category: '',
+  agent_type: ''
 })
 const showAddForm = ref(false)
 const showDeleteConfirm = ref(false)
 const deleteTargetId = ref(null)
+const currentAgentFilter = ref('')
+const showDetail = ref(false)
+const detailItem = ref(null)
+
+// 智能体选项
+const agentOptions = [
+  { value: '', label: '全部智能体', icon: '🌐', color: '#64748b' },
+  { value: 'academic', label: '学生学业', icon: '🎓', color: '#a78bfa' },
+  { value: 'student_services', label: '学生办事', icon: '📋', color: '#f472b6' },
+  { value: 'psychology', label: '心理咨询', icon: '🧡', color: '#fb923c' },
+  { value: 'policy', label: '制度查询', icon: '📜', color: '#fbbf24' },
+  { value: 'chat', label: '日常聊天', icon: '💬', color: '#22d3ee' }
+]
 
 // 分类颜色映射
 const categoryColors = {
@@ -33,6 +47,10 @@ const getCategoryColor = (cat) => {
   return categoryColors[cat] || '#64748b'
 }
 
+const getAgentOption = (agentType) => {
+  return agentOptions.find(opt => opt.value === agentType) || agentOptions[0]
+}
+
 // 内容预览截断
 const previewContent = (content, maxLen = 120) => {
   if (!content) return ''
@@ -44,13 +62,19 @@ const previewContent = (content, maxLen = 120) => {
 const loadKnowledgeBase = async () => {
   isLoading.value = true
   try {
-    const response = await apiService.getKnowledgeBase()
+    const response = await apiService.getKnowledgeBase(currentAgentFilter.value)
     knowledgeBaseItems.value = Array.isArray(response) ? response : (response.data || [])
   } catch (error) {
     console.error('加载知识库失败:', error)
   } finally {
     isLoading.value = false
   }
+}
+
+// 切换智能体筛选
+const switchAgentFilter = (agentType) => {
+  currentAgentFilter.value = agentType
+  loadKnowledgeBase()
 }
 
 // 语义搜索
@@ -85,9 +109,17 @@ const loadVectorStatus = async () => {
 }
 
 // 文件上传
+const uploadAgentType = ref('')
+
 const handleFileUpload = async (event) => {
   const file = event.target.files[0]
   if (!file) return
+
+  if (!uploadAgentType.value) {
+    uploadError.value = '请先选择要上传到的智能体分类'
+    event.target.value = ''
+    return
+  }
 
   const allowedTypes = ['.txt', '.md', '.pdf', '.docx']
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
@@ -106,6 +138,7 @@ const handleFileUpload = async (event) => {
 
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('agent_type', uploadAgentType.value)
 
   try {
     await apiService.request('/knowledge-base/upload', {
@@ -130,12 +163,16 @@ const addKnowledgeBaseItem = async () => {
     alert('标题和内容不能为空')
     return
   }
+  if (!newItem.value.agent_type) {
+    alert('请选择所属智能体')
+    return
+  }
   
   isAdding.value = true
   try {
     await apiService.addKnowledgeBaseItem(newItem.value)
     await loadKnowledgeBase()
-    newItem.value = { title: '', content: '', category: '' }
+    newItem.value = { title: '', content: '', category: '', agent_type: '' }
     showAddForm.value = false
     await loadVectorStatus()
   } catch (error) {
@@ -168,6 +205,18 @@ const executeDelete = async () => {
     showDeleteConfirm.value = false
     deleteTargetId.value = null
   }
+}
+
+// 打开详情
+const openDetail = (item) => {
+  detailItem.value = item
+  showDetail.value = true
+}
+
+// 关闭详情
+const closeDetail = () => {
+  showDetail.value = false
+  detailItem.value = null
 }
 
 onMounted(() => {
@@ -206,6 +255,19 @@ onMounted(() => {
           </button>
         </div>
       </header>
+
+      <!-- 智能体筛选标签 -->
+      <div class="agent-filter-bar">
+        <button
+          v-for="opt in agentOptions"
+          :key="opt.value"
+          :class="['agent-filter-btn', { active: currentAgentFilter === opt.value }]"
+          @click="switchAgentFilter(opt.value)"
+        >
+          <span class="agent-filter-icon">{{ opt.icon }}</span>
+          <span>{{ opt.label }}</span>
+        </button>
+      </div>
 
       <!-- 搜索区 -->
       <div class="search-section">
@@ -262,6 +324,14 @@ onMounted(() => {
                 <label class="field-label">标题</label>
                 <input v-model="newItem.title" type="text" placeholder="如：图书馆开放时间" class="field-input" />
                 
+                <label class="field-label">所属智能体 <span class="required-mark">*</span></label>
+                <select v-model="newItem.agent_type" class="field-select">
+                  <option value="" disabled>请选择智能体...</option>
+                  <option v-for="opt in agentOptions.slice(1)" :key="opt.value" :value="opt.value">
+                    {{ opt.icon }} {{ opt.label }}
+                  </option>
+                </select>
+                
                 <label class="field-label">分类</label>
                 <input v-model="newItem.category" type="text" placeholder="如：校园生活 / 学业相关" class="field-input" />
                 
@@ -280,6 +350,15 @@ onMounted(() => {
                   <div class="upload-icon">📁</div>
                   <h4>上传文件</h4>
                   <p class="upload-desc">支持 TXT、Markdown、PDF、Word</p>
+                  
+                  <label class="field-label" style="font-size: 12px; margin-bottom: 6px;">上传到智能体 <span class="required-mark">*</span></label>
+                  <select v-model="uploadAgentType" class="field-select" style="margin-bottom: 14px;">
+                    <option value="" disabled>请选择...</option>
+                    <option v-for="opt in agentOptions.slice(1)" :key="opt.value" :value="opt.value">
+                      {{ opt.icon }} {{ opt.label }}
+                    </option>
+                  </select>
+                  
                   <input
                     type="file"
                     id="kb-file"
@@ -318,24 +397,33 @@ onMounted(() => {
         </div>
 
         <transition-group name="card" tag="div" class="cards-grid" v-else>
-          <div v-for="item in knowledgeBaseItems" :key="item.id" class="k-card">
+          <div v-for="item in knowledgeBaseItems" :key="item.id" class="k-card" @click="openDetail(item)">
             <div class="k-card-body">
               <div class="k-card-header">
                 <div class="k-card-title-row">
                   <h4 class="k-card-title">{{ item.title }}</h4>
-                  <span
-                    v-if="item.category"
-                    class="k-card-tag"
-                    :style="{ background: getCategoryColor(item.category) + '20', color: getCategoryColor(item.category), borderColor: getCategoryColor(item.category) + '40' }"
-                  >
-                    {{ item.category }}
-                  </span>
+                  <div class="k-card-tags">
+                    <span
+                      v-if="item.agent_type"
+                      class="k-card-tag"
+                      :style="{ background: getAgentOption(item.agent_type).color + '20', color: getAgentOption(item.agent_type).color, borderColor: getAgentOption(item.agent_type).color + '40' }"
+                    >
+                      {{ getAgentOption(item.agent_type).icon }} {{ getAgentOption(item.agent_type).label }}
+                    </span>
+                    <span
+                      v-if="item.category"
+                      class="k-card-tag"
+                      :style="{ background: getCategoryColor(item.category) + '20', color: getCategoryColor(item.category), borderColor: getCategoryColor(item.category) + '40' }"
+                    >
+                      {{ item.category }}
+                    </span>
+                  </div>
                 </div>
                 <p class="k-card-preview">{{ previewContent(item.content) }}</p>
               </div>
               <div class="k-card-footer">
                 <span class="k-card-date">{{ item.updated_at ? new Date(item.updated_at).toLocaleDateString('zh-CN') : '' }}</span>
-                <button class="btn-delete" @click="confirmDelete(item.id)">
+                <button class="btn-delete" @click.stop="confirmDelete(item.id)">
                   <span>🗑</span> 删除
                 </button>
               </div>
@@ -344,6 +432,43 @@ onMounted(() => {
         </transition-group>
       </div>
     </div>
+
+    <!-- 知识详情弹窗 -->
+    <transition name="fade">
+      <div v-if="showDetail" class="modal-overlay" @click.self="closeDetail">
+        <div class="detail-modal-box">
+          <div class="detail-modal-header">
+            <h3>{{ detailItem?.title }}</h3>
+            <button class="detail-close-btn" @click="closeDetail">✕</button>
+          </div>
+          <div class="detail-modal-body">
+            <div class="detail-meta-row">
+              <span
+                v-if="detailItem?.agent_type"
+                class="detail-meta-tag"
+                :style="{ background: getAgentOption(detailItem.agent_type).color + '20', color: getAgentOption(detailItem.agent_type).color, borderColor: getAgentOption(detailItem.agent_type).color + '40' }"
+              >
+                {{ getAgentOption(detailItem.agent_type).icon }} {{ getAgentOption(detailItem.agent_type).label }}
+              </span>
+              <span
+                v-if="detailItem?.category"
+                class="detail-meta-tag"
+                :style="{ background: getCategoryColor(detailItem.category) + '20', color: getCategoryColor(detailItem.category), borderColor: getCategoryColor(detailItem.category) + '40' }"
+              >
+                {{ detailItem.category }}
+              </span>
+            </div>
+            <div class="detail-content">
+              <pre>{{ detailItem?.content }}</pre>
+            </div>
+            <div class="detail-time">
+              <span>创建：{{ detailItem?.created_at ? new Date(detailItem.created_at).toLocaleString('zh-CN') : '-' }}</span>
+              <span>更新：{{ detailItem?.updated_at ? new Date(detailItem.updated_at).toLocaleString('zh-CN') : '-' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- 删除确认弹窗 -->
     <transition name="fade">
@@ -421,6 +546,45 @@ onMounted(() => {
   max-width: 1000px;
   margin: 0 auto;
   padding: 32px 24px 60px;
+}
+
+/* ===== 智能体筛选栏 ===== */
+.agent-filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.agent-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.agent-filter-btn:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+}
+
+.agent-filter-btn.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.3);
+}
+
+.agent-filter-icon {
+  font-size: 14px;
 }
 
 /* ===== Header ===== */
@@ -759,7 +923,8 @@ onMounted(() => {
 }
 
 .field-input,
-.field-textarea {
+.field-textarea,
+.field-select {
   padding: 12px 14px;
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -770,8 +935,27 @@ onMounted(() => {
   transition: all 0.2s ease;
 }
 
+.field-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+.field-select option {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.required-mark {
+  color: #ef4444;
+}
+
 .field-input:focus,
-.field-textarea:focus {
+.field-textarea:focus,
+.field-select:focus {
   border-color: rgba(99, 102, 241, 0.4);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
@@ -982,6 +1166,14 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 
+.k-card-tags {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .k-card-title {
   font-size: 15px;
   font-weight: 600;
@@ -1164,6 +1356,105 @@ onMounted(() => {
 .btn-modal-confirm:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35);
+}
+
+/* ===== 详情弹窗 ===== */
+.detail-modal-box {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  max-width: 700px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.detail-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.detail-modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.detail-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.detail-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.detail-modal-body {
+  padding: 20px 24px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.detail-meta-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.detail-meta-tag {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid;
+  font-weight: 500;
+}
+
+.detail-content {
+  background: rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.detail-content pre {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.detail-time {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #475569;
+  flex-wrap: wrap;
 }
 
 /* ===== 动画 ===== */
