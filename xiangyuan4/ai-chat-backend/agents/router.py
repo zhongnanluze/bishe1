@@ -86,41 +86,8 @@ class AgentRouter:
         Returns:
             AgentType: 选择的智能体类型
         """
-        
-        # 构建路由决策提示词
-        system_prompt = self._build_router_prompt()
-        
-        # 构建消息列表
-        messages = [SystemMessage(content=system_prompt)]
-        
-        # 添加历史对话（最近3轮）
-        if conversation_history:
-            for hist in conversation_history[-6:]:
-                messages.append(HumanMessage(content=f"{hist['role']}: {hist['content']}"))
-        
-        # 添加当前消息
-        messages.append(HumanMessage(content=f"当前用户消息：{message}\n\n请分析并返回JSON格式的路由决策。"))
-        
-        try:
-            # 调用LLM进行路由决策
-            response = self.llm.invoke(messages)
-            
-            # 解析响应
-            result = self._parse_router_response(response.content)
-            
-            # 根据决策返回智能体类型
-            agent_type_str = result.get("agent_type", "general")
-            
-            if agent_type_str == "student_affairs":
-                return AgentType.STUDENT_AFFAIRS
-            elif agent_type_str == "academic":
-                return AgentType.ACADEMIC
-            else:
-                return AgentType.GENERAL
-                
-        except Exception as e:
-            # 路由失败时，使用关键词匹配作为后备方案
-            return self._fallback_route(message)
+        # 使用关键词匹配进行快速路由，避免 LLM 调用阻塞流式输出
+        return self._fallback_route(message)
     
     def _build_router_prompt(self) -> str:
         """构建路由决策提示词"""

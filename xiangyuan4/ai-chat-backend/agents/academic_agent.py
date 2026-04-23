@@ -3,15 +3,16 @@
 处理：选课、课表查询、成绩查询、学业规划
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, AsyncGenerator
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
 from .base_agent import BaseAgent, AgentResponse
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from env_utils import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+from rag_service import RAGService
 
 # 导入教务系统客户端
 try:
@@ -360,6 +361,18 @@ class AcademicAgent(BaseAgent):
             calculate_gpa
         ]
         self.llm_with_tools = self.llm.bind_tools(self.tools)
+        self.rag_service = RAGService()
+
+    async def _build_knowledge_context(self, query: str) -> str:
+        """检索知识库并格式化上下文"""
+        results = await self.rag_service.search(query, top_k=3)
+        if not results:
+            return ""
+        context = "\n\n【知识库参考信息】\n"
+        for r in results:
+            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
+            context += f"· [{r['title']}] {snippet}\n"
+        return context
     
     async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
         """处理学业相关请求"""
@@ -377,19 +390,37 @@ class AcademicAgent(BaseAgent):
 - 成绩查询：查询各科成绩和GPA
 - 选课服务：帮助学生查询和选择课程
 - 学业规划：提供学业日历和重要时间节点
+- 学业政策咨询：回答学分、绩点、考试、毕业要求等相关政策问题
 
 工作准则：
 - 使用提供的工具函数完成任务
-- 直接返回工具执行结果，不添加额外解释
+- 获取工具结果后，用亲切自然的语言向学生解释和说明
+- 成绩、课表、课程列表等涉及具体数据的内容，必须完整保留并呈现所有原始信息（包括每一门课的名称、成绩、学分、时间、地点等），不要省略任何一条记录
 - 如已提供学号，直接使用该学号进行查询
+- 回复中适当使用表情符号，让语气更友好
+- 当用户询问学业政策、规章制度等信息时，请优先参考知识库内容作答
+- 不要编造你不确定的信息，优先使用知识库提供的内容
+
+特别注意：
+- 当用户提到"大一"、"大二"、"大三"、"大四"时，需要将其转换为具体的学期参数：
+  - 大一：2024-2025-1 和 2024-2025-2
+  - 大二：2025-2026-1 和 2025-2026-2
+  - 大三：2026-2027-1 和 2026-2027-2
+  - 大四：2027-2028-1 和 2027-2028-2
+- 当用户查询特定年级的成绩时，必须调用 query_grades 工具并传递相应的学期参数
+- 例如，查询"大二的成绩"时，应该分别查询 2025-2026-1 和 2025-2026-2 两个学期的成绩
 
 当前用户信息：
 - 姓名：{full_name}
 - 学号：{student_id}
 """
-        
+
+        # 检索知识库并注入上下文
+        knowledge_context = await self._build_knowledge_context(message)
+        full_prompt = system_prompt + knowledge_context
+
         # 构建消息列表
-        messages = [SystemMessage(content=system_prompt)]
+        messages = [SystemMessage(content=full_prompt)]
         
         # 添加历史对话（使用传递的context中的历史记录）
         conversation_history = []
@@ -405,13 +436,13 @@ class AcademicAgent(BaseAgent):
         messages.append(HumanMessage(content=message))
         
         try:
-            # 调用LLM
-            response = self.llm_with_tools.invoke(messages)
+            # 调用LLM（使用异步方法）
+            response = await self.llm_with_tools.ainvoke(messages)
             
             # 处理工具调用
             if response.tool_calls:
                 # 执行工具调用
-                tool_results = []
+                tool_messages = []
                 for tool_call in response.tool_calls:
                     tool_name = tool_call['name']
                     tool_args = tool_call['args']
@@ -423,16 +454,21 @@ class AcademicAgent(BaseAgent):
                     # 找到对应的工具并执行
                     for tool_func in self.tools:
                         if tool_func.name == tool_name:
-                            result = tool_func.invoke(tool_args)
+                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
                             # 处理 ToolMessage 对象
                             if hasattr(result, 'content'):
                                 result = result.content
-                            tool_results.append(str(result))
+                            tool_messages.append(ToolMessage(
+                                content=str(result),
+                                tool_call_id=tool_call.get('id', '')
+                            ))
                             break
                 
-                # 构建最终响应
-                final_content = "\n\n".join(tool_results)
-                action_taken = f"执行了 {len(tool_results)} 个工具操作"
+                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（使用异步方法）
+                final_messages = messages + [response] + tool_messages
+                final_response = await self.llm.ainvoke(final_messages)
+                final_content = final_response.content
+                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
             else:
                 final_content = response.content
                 action_taken = None
@@ -442,10 +478,113 @@ class AcademicAgent(BaseAgent):
                 agent_type="academic",
                 action_taken=action_taken
             )
-            
+
         except Exception as e:
             return AgentResponse(
                 content=f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系教务处。",
                 agent_type="academic",
                 action_taken="error"
             )
+
+    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
+        """流式处理学业相关请求，边生成边输出"""
+        
+        user_info = context.get("user_info", {}) if context else {}
+        student_id = user_info.get("student_id")
+        full_name = user_info.get("full_name") or user_info.get("username")
+        
+        system_prompt = f"""你是文泽奇妙小AI的学业助手，专业、高效的学习伙伴。
+
+你的职责：
+- 课表查询：查看学生的课程安排
+- 成绩查询：查询各科成绩和GPA
+- 选课服务：帮助学生查询和选择课程
+- 学业规划：提供学业日历和重要时间节点
+- 学业政策咨询：回答学分、绩点、考试、毕业要求等相关政策问题
+
+工作准则：
+- 使用提供的工具函数完成任务
+- 获取工具结果后，用亲切自然的语言向学生解释和说明
+- 成绩、课表、课程列表等涉及具体数据的内容，必须完整保留并呈现所有原始信息（包括每一门课的名称、成绩、学分、时间、地点等），不要省略任何一条记录
+- 如已提供学号，直接使用该学号进行查询
+- 回复中适当使用表情符号，让语气更友好
+- 当用户询问学业政策、规章制度等信息时，请优先参考知识库内容作答
+- 不要编造你不确定的信息，优先使用知识库提供的内容
+
+特别注意：
+- 当用户提到"大一"、"大二"、"大三"、"大四"时，需要将其转换为具体的学期参数：
+  - 大一：2024-2025-1 和 2024-2025-2
+  - 大二：2025-2026-1 和 2025-2026-2
+  - 大三：2026-2027-1 和 2026-2027-2
+  - 大四：2027-2028-1 和 2027-2028-2
+- 当用户查询特定年级的成绩时，必须调用 query_grades 工具并传递相应的学期参数
+- 例如，查询"大二的成绩"时，应该分别查询 2025-2026-1 和 2025-2026-2 两个学期的成绩
+
+当前用户信息：
+- 姓名：{full_name}
+- 学号：{student_id}
+"""
+
+        # 检索知识库并注入上下文
+        knowledge_context = await self._build_knowledge_context(message)
+        full_prompt = system_prompt + knowledge_context
+
+        messages = [SystemMessage(content=full_prompt)]
+        
+        conversation_history = []
+        if context and hasattr(context, 'get'):
+            conversation_history = context.get("history", [])
+        for hist in conversation_history:
+            if hist["role"] == "user":
+                messages.append(HumanMessage(content=hist["content"]))
+            else:
+                messages.append(AIMessage(content=hist["content"]))
+        
+        messages.append(HumanMessage(content=message))
+        
+        try:
+            response = await self.llm_with_tools.ainvoke(messages)
+            
+            if response.tool_calls:
+                tool_messages = []
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call['name']
+                    tool_args = tool_call['args']
+                    
+                    if 'student_id' in tool_args and not tool_args['student_id'] and student_id:
+                        tool_args['student_id'] = student_id
+                    
+                    for tool_func in self.tools:
+                        if tool_func.name == tool_name:
+                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
+                            if hasattr(result, 'content'):
+                                result = result.content
+                            tool_messages.append(ToolMessage(
+                                content=str(result),
+                                tool_call_id=tool_call.get('id', '')
+                            ))
+                            break
+                
+                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（使用异步方法）
+                final_messages = messages + [response] + tool_messages
+                final_response = await self.llm.ainvoke(final_messages)
+                final_content = final_response.content
+                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
+            else:
+                final_content = response.content
+                action_taken = None
+            
+            for char in final_content:
+                yield {"type": "content", "content": char}
+            
+            yield {
+                "type": "done",
+                "content": AgentResponse(
+                    content=final_content,
+                    agent_type="academic",
+                    action_taken=action_taken
+                )
+            }
+            
+        except Exception as e:
+            yield {"type": "error", "content": f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系教务处。"}

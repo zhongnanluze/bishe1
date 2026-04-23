@@ -8,8 +8,11 @@ class ApiService {
   async request(endpoint, options = {}) {
     const token = authService.getAccessToken()
     
-    const defaultHeaders = {
-      'Content-Type': 'application/json'
+    const defaultHeaders = {}
+    
+    // 如果是 FormData，不设置 Content-Type，让浏览器自动处理 boundary
+    if (!(options.body instanceof FormData)) {
+      defaultHeaders['Content-Type'] = 'application/json'
     }
     
     if (token) {

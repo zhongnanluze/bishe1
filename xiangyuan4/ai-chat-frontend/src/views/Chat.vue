@@ -19,7 +19,6 @@ const isLoading = ref(false)
 const sessionId = ref(null)
 const currentAgent = ref('general')
 const showAgentInfo = ref(false)
-const useStreaming = ref(true)
 const theme = ref('dark') // 固定为深色主题
 const userInfo = ref(null)
 const router = useRouter()
@@ -96,11 +95,7 @@ const sendMessage = async () => {
       selectedSessionId.value = response.session_id
     }
     
-    if (useStreaming.value) {
-      await sendStreamingMessage(userMessage.content)
-    } else {
-      await sendNormalMessage(userMessage.content)
-    }
+    await sendStreamingMessage(userMessage.content)
   } catch (error) {
     console.error('错误:', error)
     const errorMessage = {
@@ -115,33 +110,6 @@ const sendMessage = async () => {
   } finally {
     isLoading.value = false
   }
-}
-
-const sendNormalMessage = async (message) => {
-  const response = await apiService.post('/chat', {
-    message: message,
-    session_id: sessionId.value
-  })
-  
-  if (response.session_id) {
-    sessionId.value = response.session_id
-  }
-  if (response.agent_type) {
-    currentAgent.value = response.agent_type
-  }
-  
-  const aiMessage = {
-    id: Date.now() + 1,
-    content: response.response,
-    sender: 'ai',
-    agentType: response.agent_type || 'general',
-    timestamp: new Date().toLocaleTimeString()
-  }
-  messages.value.push(aiMessage)
-  
-  // 更新会话列表
-  await fetchSessions()
-  scrollToBottom()
 }
 
 const sendStreamingMessage = async (message) => {
@@ -257,10 +225,6 @@ const clearMessages = () => {
 
 const toggleAgentInfo = () => {
   showAgentInfo.value = !showAgentInfo.value
-}
-
-const toggleStreaming = () => {
-  useStreaming.value = !useStreaming.value
 }
 
 const toggleTheme = () => {
@@ -665,8 +629,10 @@ onMounted(async () => {
           <div class="message-content-container">
             <!-- AI Message Content -->
             <div v-if="message.sender === 'ai'" class="message-content ai-content">
-              <div v-html="parseMarkdown(message.content)"></div>
-              <span v-if="message.isStreaming" class="streaming-cursor">|</span>
+              <template v-if="message.isStreaming">
+                {{ message.content }}<span class="streaming-cursor">|</span>
+              </template>
+              <div v-else v-html="parseMarkdown(message.content)"></div>
             </div>
             <!-- User Message Content -->
             <div v-else class="message-content user-content">
@@ -940,6 +906,35 @@ body {
   z-index: 20;
   padding: 12px;
   height: 100vh;
+  overflow: hidden;
+}
+
+/* 会话列表容器 */
+.sidebar .flex-1 {
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(100vh - 180px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) rgba(15, 23, 42, 0.3);
+}
+
+/* 滚动条样式 */
+.sidebar .flex-1::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar .flex-1::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 3px;
+}
+
+.sidebar .flex-1::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.5);
+  border-radius: 3px;
+}
+
+.sidebar .flex-1::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
 }
 
 /* 边栏头部 */

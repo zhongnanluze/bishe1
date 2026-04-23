@@ -22,7 +22,9 @@ from session_manager import session_manager
 from auth_routes import router as auth_router
 from knowledge_base_routes import router as knowledge_base_router
 from auth_utils import get_current_user
-from database import init_db, User
+from database import init_db, User, AsyncSessionLocal, KnowledgeBaseModel
+from rag_service import RAGService
+from sqlalchemy import select
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -76,6 +78,7 @@ academic_agent = AcademicAgent()
 AGENTS = {
     AgentType.STUDENT_AFFAIRS: student_affairs_agent,
     AgentType.ACADEMIC: academic_agent,
+    AgentType.GENERAL: student_affairs_agent,  # 兜底，确保通用对话也能继续
 }
 
 
@@ -90,27 +93,28 @@ async def stream_response(
 ) -> AsyncGenerator[str, None]:
     """
     流式生成响应
-    
+
     Args:
         message: 用户消息
         session_id: 会话ID
         agent_type: 智能体类型
         conversation_history: 对话历史
-        
+
     Yields:
         str: JSON格式的数据块
     """
+    response_content = ""
+    agent_type_str = "general"
+    action_taken = None
+
     try:
-        # 获取对应的智能体
         agent = AGENTS.get(agent_type)
-        
+
         if not agent:
-            # 通用回复
             response_content = "您好！我是学生智能服务助手。我可以帮您处理：\n\n1. **学生事务**：证件补办、学费缴纳、饭卡充值、办事流程查询\n2. **学业相关**：选课、课表查询、成绩查询、GPA计算\n\n请问有什么可以帮助您的？"
             agent_type_str = "general"
             action_taken = None
-            
-            # 流式输出通用回复（逐字）
+
             for i, char in enumerate(response_content):
                 chunk = {
                     "type": "content",
@@ -119,9 +123,8 @@ async def stream_response(
                     "total": len(response_content)
                 }
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                await asyncio.sleep(0.01)  # 模拟打字效果
-            
-            # 发送完成信号
+                await asyncio.sleep(0.01)
+
             end_chunk = {
                 "type": "done",
                 "agent_type": agent_type_str,
@@ -130,40 +133,41 @@ async def stream_response(
             }
             yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
         else:
-            # 调用智能体处理请求
-            agent_response = await agent.process(
+            async for result in agent.stream_process(
                 message=message,
                 session_id=session_id,
                 context={"history": conversation_history, "user_info": user_info}
-            )
-            response_content = agent_response.content
-            agent_type_str = agent_response.agent_type
-            action_taken = agent_response.action_taken
-            
-            # 流式输出响应内容（逐字）
-            for i, char in enumerate(response_content):
-                chunk = {
-                    "type": "content",
-                    "content": char,
-                    "index": i,
-                    "total": len(response_content)
-                }
-                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                await asyncio.sleep(0.01)  # 模拟打字效果
-            
-            # 发送完成信号
-            end_chunk = {
-                "type": "done",
-                "agent_type": agent_type_str,
-                "action_taken": action_taken,
-                "session_id": session_id
-            }
-            yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
-        
-        # 保存对话历史
+            ):
+                if result["type"] == "content":
+                    response_content += result["content"]
+                    chunk = {
+                        "type": "content",
+                        "content": result["content"]
+                    }
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                elif result["type"] == "done":
+                    agent_response = result["content"]
+                    response_content = agent_response.content
+                    agent_type_str = agent_response.agent_type
+                    action_taken = agent_response.action_taken
+
+                    end_chunk = {
+                        "type": "done",
+                        "agent_type": agent_type_str,
+                        "action_taken": action_taken,
+                        "session_id": session_id
+                    }
+                    yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
+                elif result["type"] == "error":
+                    error_chunk = {
+                        "type": "error",
+                        "error": result["content"]
+                    }
+                    yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+
         await session_manager.add_message(session_id, "user", message)
         await session_manager.add_message(session_id, "assistant", response_content, agent_type_str)
-        
+
     except Exception as e:
         error_chunk = {
             "type": "error",
@@ -196,32 +200,16 @@ async def health_check():
     }
 
 
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat")
 async def chat(request: ChatRequest, current_user: Optional[User] = Depends(get_current_user)):
     """
-    主要对话端点（非流式）
+    主要对话端点（流式）
     
     接收用户消息，由系统自动路由到合适的智能体进行处理
+    使用 Server-Sent Events (SSE) 实现流式输出
     """
     try:
-        # 1. 获取或创建会话
-        session_id = request.session_id
-        user_id = current_user.id if current_user else None
-        if not session_id:
-            session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
-        else:
-            session = await session_manager.get_session(session_id)
-            if not session:
-                # 会话不存在，创建新会话
-                session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
-        
-        # 2. 获取对话历史
-        conversation_history = await session_manager.get_conversation_history(session_id)
-        
-        # 3. 路由决策 - 选择智能体
-        agent_type = await router.route(request.message, conversation_history)
-        
-        # 4. 准备用户信息
+        # 1. 准备用户信息
         user_info = None
         if current_user:
             user_info = {
@@ -232,35 +220,38 @@ async def chat(request: ChatRequest, current_user: Optional[User] = Depends(get_
                 "email": current_user.email
             }
         
-        # 5. 获取对应的智能体
-        agent = AGENTS.get(agent_type)
-        
-        if not agent:
-            # 如果没有匹配的智能体，使用通用回复
-            response_content = "您好！我是学生智能服务助手。我可以帮您处理：\n\n1. **学生事务**：证件补办、学费缴纳、饭卡充值、办事流程查询\n2. **学业相关**：选课、课表查询、成绩查询、GPA计算\n\n请问有什么可以帮助您的？"
-            agent_type_str = "general"
-            action_taken = None
+        # 2. 获取或创建会话
+        session_id = request.session_id
+        user_id = current_user.id if current_user else None
+        if not session_id:
+            session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
         else:
-            # 5. 调用智能体处理请求
-            agent_response = await agent.process(
+            session = await session_manager.get_session(session_id)
+            if not session:
+                # 会话不存在，创建新会话
+                session_id = await session_manager.create_session(user_id=user_id, user_info=user_info)
+        
+        # 3. 获取对话历史
+        conversation_history = await session_manager.get_conversation_history(session_id)
+        
+        # 4. 路由决策 - 选择智能体
+        agent_type = await router.route(request.message, conversation_history)
+        
+        # 5. 返回流式响应
+        return StreamingResponse(
+            stream_response(
                 message=request.message,
                 session_id=session_id,
-                context={"history": conversation_history, "user_info": user_info}
-            )
-            response_content = agent_response.content
-            agent_type_str = agent_response.agent_type
-            action_taken = agent_response.action_taken
-        
-        # 6. 保存对话历史
-        await session_manager.add_message(session_id, "user", request.message)
-        await session_manager.add_message(session_id, "assistant", response_content, agent_type_str)
-        
-        # 7. 返回响应
-        return ChatResponse(
-            response=response_content,
-            session_id=session_id,
-            agent_type=agent_type_str,
-            action_taken=action_taken
+                agent_type=agent_type,
+                conversation_history=conversation_history,
+                user_info=user_info
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
         )
         
     except Exception as e:
@@ -486,6 +477,36 @@ async def list_agents():
 
 # ============ 后台任务 ============
 
+async def init_rag_index():
+    """启动时检查并初始化 RAG 向量索引"""
+    try:
+        rag = RAGService()
+        count = await rag.count_documents()
+        if count == 0:
+            print("向量库为空，正在从 MySQL 重建索引...")
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(KnowledgeBaseModel))
+                items = result.scalars().all()
+                if items:
+                    docs = [
+                        {
+                            "id": item.id,
+                            "title": item.title,
+                            "content": item.content,
+                            "category": item.category
+                        }
+                        for item in items
+                    ]
+                    await rag.rebuild(docs)
+                    print(f"RAG 索引重建完成，共 {len(docs)} 条文档")
+                else:
+                    print("MySQL 知识库为空，无需重建 RAG 索引")
+        else:
+            print(f"RAG 向量库已有 {count} 个文档片段")
+    except Exception as e:
+        print(f"RAG 索引初始化失败: {e}")
+
+
 async def cleanup_task():
     """定期清理过期会话的后台任务"""
     while True:
@@ -503,13 +524,16 @@ async def startup_event():
     """应用启动时执行"""
     # 初始化数据库
     await init_db()
-    
+
     # 注册认证路由
     app.include_router(auth_router)
-    
+
     # 注册知识库路由
     app.include_router(knowledge_base_router)
-    
+
+    # 初始化 RAG 索引
+    await init_rag_index()
+
     # 启动后台清理任务
     asyncio.create_task(cleanup_task())
     print("=" * 50)
@@ -526,6 +550,7 @@ async def startup_event():
     print("  - GET  /api/agents        查看可用智能体")
     print("  - GET  /api/knowledge-base 获取知识库列表")
     print("  - POST /api/knowledge-base 添加知识库项")
+    print("  - POST /api/knowledge-base/search 语义搜索")
     print("  - DELETE /api/knowledge-base/{id} 删除知识库项")
     print("  - GET  /docs              API 文档")
     print("=" * 50)
