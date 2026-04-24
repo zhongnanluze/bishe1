@@ -7,9 +7,9 @@ import re
 import asyncio
 from typing import List, Dict, Optional
 
+import httpx
 from chromadb import PersistentClient
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
 
 # Chroma 持久化路径
 CHROMA_DB_PATH = os.path.join(
@@ -17,6 +17,106 @@ CHROMA_DB_PATH = os.path.join(
     "chroma_data"
 )
 COLLECTION_NAME = "knowledge_base"
+
+# Embedding API 配置（优先从环境变量读取）
+EMBEDDING_API_KEY = (
+    os.getenv("ALIYUN_BAILIAN_API_KEY")
+    or os.getenv("OPENAI_API_KEY")
+    or os.getenv("EMBEDDING_API_KEY")
+)
+EMBEDDING_BASE_URL = (
+    os.getenv("ALIYUN_BAILIA_BASE_URL")
+    or os.getenv("EMBEDDING_BASE_URL")
+    or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+)
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL") or "text-embedding-v3"
+EMBEDDING_BATCH_SIZE = 25  # 每批最大文本数，避免 API 超时
+
+
+class EmbeddingClient:
+    """
+    Embedding 客户端
+    优先调用远程 Embedding API，无配置时自动回退到本地模型
+    """
+
+    def __init__(self):
+        self.api_key = EMBEDDING_API_KEY
+        self.base_url = EMBEDDING_BASE_URL.rstrip("/")
+        self.model = EMBEDDING_MODEL
+        self.use_local = not self.api_key
+
+        if self.use_local:
+            print("[EmbeddingClient] 未检测到 Embedding API Key，回退到本地模型 SentenceTransformer")
+            from sentence_transformers import SentenceTransformer
+            self._local_model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+        else:
+            print(f"[EmbeddingClient] 使用 API Embedding: {self.base_url} / {self.model}")
+
+    async def embed(self, texts: List[str]) -> List[List[float]]:
+        """
+        对文本列表生成 Embedding 向量
+
+        Args:
+            texts: 文本列表
+
+        Returns:
+            List[List[float]]: 每个文本对应的向量
+        """
+        if not texts:
+            return []
+
+        if self.use_local:
+            return await self._embed_local(texts)
+
+        return await self._embed_api(texts)
+
+    async def _embed_local(self, texts: List[str]) -> List[List[float]]:
+        """本地模型生成 embedding"""
+        embeddings = await asyncio.to_thread(
+            self._local_model.encode, texts, convert_to_numpy=True
+        )
+        return embeddings.tolist()
+
+    async def _embed_api(self, texts: List[str]) -> List[List[float]]:
+        """远程 API 生成 embedding，支持分批"""
+        all_embeddings = []
+
+        for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            batch = texts[i : i + EMBEDDING_BATCH_SIZE]
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        f"{self.base_url}/embeddings",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={"model": self.model, "input": batch},
+                        timeout=60,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                # OpenAI 兼容格式: data[i].embedding
+                batch_embeddings = [item["embedding"] for item in data["data"]]
+                all_embeddings.extend(batch_embeddings)
+
+            except Exception as e:
+                print(f"[EmbeddingClient] API 调用失败: {e}")
+                # API 失败时，如果本地模型已加载，回退到本地
+                if not self.use_local:
+                    print("[EmbeddingClient] 尝试回退到本地模型...")
+                    try:
+                        from sentence_transformers import SentenceTransformer
+                        self._local_model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+                        self.use_local = True
+                        # 用本地模型重新生成全部文本的 embedding
+                        return await self._embed_local(texts)
+                    except Exception as local_err:
+                        print(f"[EmbeddingClient] 本地模型回退也失败: {local_err}")
+                raise
+
+        return all_embeddings
 
 
 class RAGService:
@@ -45,8 +145,8 @@ class RAGService:
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"}
         )
-        # 加载 Embedding 模型（首次会自动下载到本地缓存）
-        self.model = SentenceTransformer("BAAI/bge-small-zh-v1.5")
+        # 初始化 Embedding 客户端（API 优先，无配置则回退本地）
+        self.embed_client = EmbeddingClient()
 
     def _chunk_text(self, text: str, max_length: int = 512, overlap: int = 50) -> List[str]:
         """
@@ -110,15 +210,32 @@ class RAGService:
 
         return [c for c in paragraphs if c.strip()]
 
+    def _is_dimension_error(self, error_msg: str) -> bool:
+        """判断错误是否由向量维度不匹配引起"""
+        lower = error_msg.lower()
+        return any(k in lower for k in ["dimension", "expecting embedding", "embedding dimension", "size mismatch"])
+
+    async def _recreate_collection(self):
+        """删除旧集合并重新创建（用于维度变化等场景）"""
+        print("[RAGService] 正在重建向量集合...")
+        try:
+            await asyncio.to_thread(self.client.delete_collection, COLLECTION_NAME)
+        except Exception:
+            pass
+        self.collection = self.client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"}
+        )
+        print("[RAGService] 向量集合重建完成")
+
     async def add_document(self, doc_id: str, title: str, content: str, category: Optional[str] = None, agent_type: Optional[str] = None):
         """添加文档到向量库"""
         chunks = self._chunk_text(content)
         if not chunks:
             return
 
-        # 批量生成 embeddings（在线程池中执行，避免阻塞事件循环）
-        embeddings = await asyncio.to_thread(self.model.encode, chunks, convert_to_numpy=True)
-        embeddings = embeddings.tolist()
+        # 生成 embeddings（API 优先，失败回退本地）
+        embeddings = await self.embed_client.embed(chunks)
 
         ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
         metadatas = [{
@@ -129,13 +246,27 @@ class RAGService:
             "chunk_index": i
         } for i in range(len(chunks))]
 
-        await asyncio.to_thread(
-            self.collection.add,
-            ids=ids,
-            documents=chunks,
-            embeddings=embeddings,
-            metadatas=metadatas
-        )
+        try:
+            await asyncio.to_thread(
+                self.collection.add,
+                ids=ids,
+                documents=chunks,
+                embeddings=embeddings,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            if self._is_dimension_error(str(e)):
+                print(f"[RAGService] 维度不匹配，自动重建集合并重试添加: {e}")
+                await self._recreate_collection()
+                await asyncio.to_thread(
+                    self.collection.add,
+                    ids=ids,
+                    documents=chunks,
+                    embeddings=embeddings,
+                    metadatas=metadatas
+                )
+            else:
+                raise
 
     async def search(self, query: str, top_k: int = 3, agent_type: Optional[str] = None) -> List[Dict]:
         """语义搜索
@@ -148,23 +279,34 @@ class RAGService:
         if not query or not query.strip():
             return []
 
-        query_embedding = await asyncio.to_thread(
-            self.model.encode, [query], convert_to_numpy=True
-        )
-        query_embedding = query_embedding.tolist()
+        query_embedding = await self.embed_client.embed([query])
 
         # 构建过滤条件
         where_filter = None
         if agent_type:
             where_filter = {"agent_type": agent_type}
 
-        results = await asyncio.to_thread(
-            self.collection.query,
-            query_embeddings=query_embedding,
-            n_results=top_k,
-            where=where_filter,
-            include=["documents", "metadatas", "distances"]
-        )
+        try:
+            results = await asyncio.to_thread(
+                self.collection.query,
+                query_embeddings=query_embedding,
+                n_results=top_k,
+                where=where_filter,
+                include=["documents", "metadatas", "distances"]
+            )
+        except Exception as e:
+            if self._is_dimension_error(str(e)):
+                print(f"[RAGService] 维度不匹配，自动重建集合并重试查询: {e}")
+                await self._recreate_collection()
+                results = await asyncio.to_thread(
+                    self.collection.query,
+                    query_embeddings=query_embedding,
+                    n_results=top_k,
+                    where=where_filter,
+                    include=["documents", "metadatas", "distances"]
+                )
+            else:
+                raise
 
         output = []
         if results and results.get("ids") and results["ids"][0]:

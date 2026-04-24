@@ -4,33 +4,19 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b6b5da8e-c687-45de-acba-1eb24d99343b" name="更改" comment="智能体3.0">
+    <list default="true" id="b6b5da8e-c687-45de-acba-1eb24d99343b" name="更改" comment="智能体4.0(大迭代)">
+      <change afterPath="$PROJECT_DIR$/.idea/data_source_mapping.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources/875a7ef3-53a6-4965-b7ec-23eb788d455b.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources/875a7ef3-53a6-4965-b7ec-23eb788d455b.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/academic_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/academic_agent.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/router.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/router.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/student_affairs_agent.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/auth_routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/auth_routes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/5e1be8f0-5243-48cf-b9de-fd871874574f/data_level0.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/5e1be8f0-5243-48cf-b9de-fd871874574f/header.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/5e1be8f0-5243-48cf-b9de-fd871874574f/length.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/5e1be8f0-5243-48cf-b9de-fd871874574f/link_lists.bin" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/32db6b3a-3e03-46a3-b52f-fdc493011662/data_level0.bin" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/32db6b3a-3e03-46a3-b52f-fdc493011662/data_level0.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/32db6b3a-3e03-46a3-b52f-fdc493011662/length.bin" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/32db6b3a-3e03-46a3-b52f-fdc493011662/length.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/chroma.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/chroma.sqlite3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/init_db.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/init_db.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/knowledge_base_routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/knowledge_base_routes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/rag_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/rag_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/session_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/session_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/router/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/router/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/services/apiService.js" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/services/apiService.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/services/authService.js" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/services/authService.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Chat.vue" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Chat.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/KnowledgeBase.vue" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/KnowledgeBase.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Login.vue" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Login.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -81,38 +67,38 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Node.js.authService.js.executor&quot;: &quot;Run&quot;,
-    &quot;Python.auth_utils.executor&quot;: &quot;Run&quot;,
-    &quot;Python.init_db.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/Administrator/Desktop/bishe1&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;reference.idesettings.debugger.python&quot;,
-    &quot;ts.external.directory.path&quot;: &quot;D:\\pycharm\\PyCharm 2025.2.1.1\\plugins\\javascript-plugin\\jsLanguageServicesImpl\\external&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Node.js.authService.js.executor": "Run",
+    "Python.auth_utils.executor": "Run",
+    "Python.init_db.executor": "Run",
+    "Python.main.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "git-widget-placeholder": "main",
+    "ignore.virus.scanning.warn.message": "true",
+    "last_opened_file_path": "C:/Users/Administrator/Desktop/bishe1",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "reference.idesettings.debugger.python",
+    "ts.external.directory.path": "D:\\pycharm\\PyCharm 2025.2.1.1\\plugins\\javascript-plugin\\jsLanguageServicesImpl\\external",
+    "vue.rearranger.settings.migration": "true"
   },
-  &quot;keyToStringList&quot;: {
-    &quot;DatabaseDriversLRU&quot;: [
-      &quot;mysql_aurora&quot;
+  "keyToStringList": {
+    "DatabaseDriversLRU": [
+      "mysql_aurora"
     ],
-    &quot;vue.recent.templates&quot;: [
-      &quot;Vue Composition API Component&quot;
+    "vue.recent.templates": [
+      "Vue Composition API Component"
     ]
   }
-}</component>
+}]]></component>
   <component name="PyDebuggerOptionsProvider">
     <option name="mySaveCallSignatures" value="true" />
   </component>
@@ -185,7 +171,8 @@
       <workItem from="1776603355459" duration="3885000" />
       <workItem from="1776862823882" duration="5358000" />
       <workItem from="1776871406566" duration="1697000" />
-      <workItem from="1776940829545" duration="7398000" />
+      <workItem from="1776940829545" duration="10278000" />
+      <workItem from="1777034945293" duration="1740000" />
     </task>
     <task id="LOCAL-00001" summary="智能体1.0(前端是狗屎版)">
       <option name="closed" value="true" />
@@ -235,7 +222,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776941040232</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="智能体4.0(大迭代)">
+      <option name="closed" value="true" />
+      <created>1776949315554</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1776949315554</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -256,11 +251,12 @@
     <MESSAGE value="智能体1.0(前端是狗屎版)" />
     <MESSAGE value="智能体2.2" />
     <MESSAGE value="智能体3.0" />
-    <option name="LAST_COMMIT_MESSAGE" value="智能体3.0" />
+    <MESSAGE value="智能体4.0(大迭代)" />
+    <option name="LAST_COMMIT_MESSAGE" value="智能体4.0(大迭代)" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/bishe1$init_db.coverage" NAME="init_db 覆盖结果" MODIFIED="1776943132471" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
-    <SUITE FILE_PATH="coverage/bishe1$main.coverage" NAME="main 覆盖结果" MODIFIED="1776947075574" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
+    <SUITE FILE_PATH="coverage/bishe1$init_db.coverage" NAME="init_db 覆盖结果" MODIFIED="1777035261180" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
+    <SUITE FILE_PATH="coverage/bishe1$main.coverage" NAME="main 覆盖结果" MODIFIED="1777036488720" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
     <SUITE FILE_PATH="coverage/bishe1$auth_utils.coverage" NAME="auth_utils 覆盖结果" MODIFIED="1776605802589" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
   </component>
 </project>

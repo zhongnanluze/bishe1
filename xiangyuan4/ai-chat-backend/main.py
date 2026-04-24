@@ -12,6 +12,43 @@ import asyncio
 import uvicorn
 import json
 
+# Token 计数（优先使用 tiktoken，未安装时回退到字符估算）
+try:
+    import tiktoken
+    _tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
+    TIKTOKEN_AVAILABLE = True
+    print("[TokenCounter] tiktoken 已加载，使用 cl100k_base 编码")
+except Exception:
+    TIKTOKEN_AVAILABLE = False
+    _tiktoken_encoder = None
+    print("[TokenCounter] tiktoken 未安装，回退到字符估算")
+
+
+def count_tokens(text: str) -> int:
+    """计算文本的 token 数量"""
+    if not text:
+        return 0
+    if TIKTOKEN_AVAILABLE and _tiktoken_encoder:
+        return len(_tiktoken_encoder.encode(text))
+    # Fallback: 中文字符约 1:1~1.5，取保守值
+    return max(len(text), 1)
+
+
+def count_messages_tokens(messages: list) -> int:
+    """计算对话历史 + 当前消息的 token 总数（含固定开销）"""
+    if not messages:
+        return 0
+    total = 0
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        # 每条消息有固定开销（role 标记、分隔符等，OpenAI 格式约 4 tokens）
+        total += count_tokens(content) + 4
+    # 整体 prompt 有额外开销
+    total += 2
+    return total
+
+
 # 导入智能体模块
 from agents.router import AgentRouter, AgentType
 from agents.academic_agent import AcademicAgent
@@ -179,19 +216,23 @@ async def stream_response(
         await session_manager.add_message(session_id, "user", message)
         await session_manager.add_message(session_id, "assistant", response_content, agent_type_str)
         
-        # 记录调用用量统计
+        # 记录调用用量统计（使用 tiktoken 精确计数）
         try:
             async with AsyncSessionLocal() as db:
-                # 使用字符数作为token估算（中文约1:2，英文约1:1，取粗略值）
-                prompt_tokens = max(len(message), 1)
-                completion_tokens = max(len(response_content), 1)
+                # 计算 prompt tokens：历史消息 + 当前消息 + 系统提示词固定开销
+                system_overhead = 200  # 各 agent system prompt 的近似开销
+                history_tokens = count_messages_tokens(conversation_history)
+                prompt_tokens = count_tokens(message) + history_tokens + system_overhead
+                completion_tokens = count_tokens(response_content)
+                total_tokens = prompt_tokens + completion_tokens
+                
                 usage = UsageLog(
                     user_id=user_info.get("id") if user_info else None,
                     session_id=session_id,
                     agent_type=agent_type_str,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
-                    total_tokens=prompt_tokens + completion_tokens
+                    total_tokens=total_tokens
                 )
                 db.add(usage)
                 await db.commit()

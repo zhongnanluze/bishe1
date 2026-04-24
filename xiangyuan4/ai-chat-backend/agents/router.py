@@ -109,6 +109,8 @@ class AgentRouter:
         """
         根据用户消息路由到合适的智能体
         
+        优先使用 LLM 进行意图分类，失败或置信度过低时降级到关键词匹配
+        
         Args:
             message: 用户输入消息
             conversation_history: 对话历史
@@ -116,8 +118,62 @@ class AgentRouter:
         Returns:
             AgentType: 选择的智能体类型
         """
-        # 使用关键词匹配进行快速路由
-        return self._fallback_route(message)
+        try:
+            # 构建路由决策提示词
+            system_prompt = self._build_router_prompt()
+            
+            messages = [SystemMessage(content=system_prompt)]
+            
+            # 加入最近 3 轮对话历史作为上下文（帮助理解指代）
+            if conversation_history:
+                recent_history = conversation_history[-6:]  # 最近 6 条消息（3 轮）
+                for msg in recent_history:
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    # 只保留 role 和 content，避免过长的 timestamp 干扰
+                    if role == "user":
+                        messages.append(HumanMessage(content=f"[历史] 用户: {content}"))
+                    elif role == "assistant":
+                        messages.append(SystemMessage(content=f"[历史] 助手: {content}"))
+            
+            # 当前用户消息
+            messages.append(HumanMessage(content=f"[当前] 用户: {message}\n\n请返回 JSON 格式的路由决策。"))
+            
+            # 调用 LLM 进行意图分类
+            response = await self.llm.ainvoke(messages)
+            raw_content = response.content if hasattr(response, "content") else str(response)
+            
+            # 解析路由决策
+            result = self._parse_router_response(raw_content)
+            agent_type_str = result.get("agent_type", "chat").lower().strip()
+            confidence = result.get("confidence", 0.0)
+            reasoning = result.get("reasoning", "")
+            
+            # 映射字符串到枚举
+            agent_type_map = {
+                "academic": AgentType.ACADEMIC,
+                "student_services": AgentType.STUDENT_SERVICES,
+                "psychology": AgentType.PSYCHOLOGY,
+                "policy": AgentType.POLICY,
+                "chat": AgentType.CHAT,
+            }
+            
+            mapped_type = agent_type_map.get(agent_type_str)
+            
+            # 置信度过低或无法映射时降级到关键词匹配
+            if confidence < 0.5 or mapped_type is None:
+                if mapped_type is None:
+                    print(f"[AgentRouter] LLM 返回未知类型 '{agent_type_str}'，降级到关键词匹配")
+                else:
+                    print(f"[AgentRouter] LLM 置信度 {confidence} 过低，降级到关键词匹配")
+                return self._fallback_route(message)
+            
+            print(f"[AgentRouter] LLM 路由 -> {agent_type_str} (confidence: {confidence}, reasoning: {reasoning})")
+            return mapped_type
+            
+        except Exception as e:
+            print(f"[AgentRouter] LLM 路由异常: {e}，降级到关键词匹配")
+            return self._fallback_route(message)
     
     def _build_router_prompt(self) -> str:
         """构建路由决策提示词"""
@@ -173,21 +229,52 @@ class AgentRouter:
         return prompt
     
     def _parse_router_response(self, response: str) -> Dict:
-        """解析路由决策响应"""
+        """解析路由决策响应，支持纯 JSON 和 Markdown 代码块"""
+        cleaned = response.strip()
+        
+        # 处理 Markdown 代码块 ```json ... ```
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+        
+        # 尝试直接解析 JSON
         try:
-            result = json.loads(response)
+            result = json.loads(cleaned)
+            # 确保必要字段存在
+            if "agent_type" not in result:
+                result["agent_type"] = "chat"
+            if "confidence" not in result:
+                result["confidence"] = 0.8
             return result
         except json.JSONDecodeError:
-            try:
-                start = response.find('{')
-                end = response.rfind('}') + 1
-                if start != -1 and end > start:
-                    json_str = response[start:end]
-                    return json.loads(json_str)
-            except:
-                pass
-            
-            return {"agent_type": "chat", "confidence": 0.5}
+            pass
+        
+        # 尝试从文本中提取最后一个 JSON 对象
+        try:
+            start = cleaned.find('{')
+            end = cleaned.rfind('}') + 1
+            if start != -1 and end > start:
+                json_str = cleaned[start:end]
+                result = json.loads(json_str)
+                if "agent_type" not in result:
+                    result["agent_type"] = "chat"
+                if "confidence" not in result:
+                    result["confidence"] = 0.8
+                return result
+        except:
+            pass
+        
+        # 兜底：根据关键词猜测
+        if '"agent_type"' in cleaned:
+            for key in ["academic", "student_services", "psychology", "policy", "chat"]:
+                if key in cleaned:
+                    return {"agent_type": key, "confidence": 0.6}
+        
+        return {"agent_type": "chat", "confidence": 0.5}
     
     def _fallback_route(self, message: str) -> AgentType:
         """
