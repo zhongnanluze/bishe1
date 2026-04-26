@@ -235,6 +235,30 @@ class SessionManager:
                 await db.rollback()
                 raise e
     
+    async def update_session_topic(self, session_id: str, new_topic: str):
+        """
+        更新会话主题
+        
+        Args:
+            session_id: 会话ID
+            new_topic: 新主题
+        """
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(
+                    select(SessionModel).where(
+                        SessionModel.session_id == session_id
+                    )
+                )
+                session_model = result.scalar_one_or_none()
+                
+                if session_model:
+                    session_model.topic = new_topic
+                    await db.commit()
+            except Exception as e:
+                await db.rollback()
+                print(f"更新会话主题失败: {e}")
+    
     async def get_conversation_history(self, session_id: str) -> List[Dict]:
         """
         获取对话历史

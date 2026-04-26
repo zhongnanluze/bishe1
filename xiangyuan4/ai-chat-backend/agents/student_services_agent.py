@@ -193,95 +193,6 @@ class StudentServicesAgent(BaseAgent):
             context += f"· [{r['title']}] {snippet}\n"
         return context
     
-    async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
-        """处理学生办事相关请求"""
-        
-        system_prompt = """你是文泽奇妙小AI的学生办事助手，一个友善、热情且专业的校园服务专家。你喜欢用轻松愉快的语气与学生交流，让校园生活变得更加便捷。
-
-你的职责：
-- 证件补办：校园卡、学生证等证件的补办申请，全程耐心指导
-- 学费缴纳：协助完成学费缴纳操作，提供多种支付方式选择
-- 饭卡充值：帮助充值校园饭卡，确保学生用餐无忧
-- 办事流程查询：提供各类事务的详细办理流程，让学生少跑腿
-- 校园生活咨询：回答图书馆、食堂、宿舍、校医院等相关问题
-
-服务风格：
-- 语气亲切友好，像朋友一样交流
-- 主动关心学生需求，提供个性化建议
-- 遇到复杂问题时，分步骤清晰指导
-- 对于无法在线办理的事项，提供详细的线下办理指引
-- 适当使用表情和语气词，让对话更有温度
-
-工作准则：
-- 办理业务前确认学生身份（学号）
-- 保护学生个人信息安全
-- 及时更新办理进度和相关信息
-- 遇到问题时积极协助解决
-- 当用户询问校园生活信息（图书馆、食堂、宿舍、校医院等）时，请优先参考知识库信息作答
-- **严禁编造任何信息**：如果知识库或工具中没有相关信息，必须明确告知用户"这个问题我暂时无法确认，建议咨询学生事务中心或查阅学校官网"
-- 不要猜测、不要推断、不要使用未经验证的信息
-- 对于办事流程、地点、时间、费用等具体信息，只能使用工具函数返回的结果或知识库内容，不能自行编造
-
-请使用提供的工具函数来帮助学生完成事务办理，让学生感受到校园服务的温暖和便捷！"""
-
-        knowledge_context = await self._build_knowledge_context(message)
-        full_prompt = system_prompt + knowledge_context
-
-        messages = [SystemMessage(content=full_prompt)]
-        
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            if response.tool_calls:
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                tool_results = []
-                for tm in tool_messages:
-                    tool_results.append(tm.content)
-                final_content = "办理结果如下：\n\n" + "\n\n".join(tool_results)
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-            else:
-                final_content = response.content
-                action_taken = None
-            
-            return AgentResponse(
-                content=final_content,
-                agent_type="student_services",
-                action_taken=action_taken
-            )
-
-        except Exception as e:
-            return AgentResponse(
-                content=f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系学生事务中心。",
-                agent_type="student_services",
-                action_taken="error"
-            )
-
     async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
         """流式处理学生办事相关请求，边生成边输出"""
         
@@ -348,24 +259,34 @@ class StudentServicesAgent(BaseAgent):
                             break
                 
                 final_messages = messages + [response] + tool_messages
-                final_response = await self.llm.ainvoke(final_messages)
-                final_content = final_response.content
+                full_content = ""
+                async for chunk in self.llm.astream(final_messages):
+                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if content:
+                        full_content += content
+                        for char in content:
+                            yield {"type": "content", "content": char}
                 action_taken = f"执行了 {len(tool_messages)} 个工具操作"
+                yield {
+                    "type": "done",
+                    "content": AgentResponse(
+                        content=full_content,
+                        agent_type="student_services",
+                        action_taken=action_taken
+                    )
+                }
             else:
                 final_content = response.content
-                action_taken = None
-            
-            for char in final_content:
-                yield {"type": "content", "content": char}
-            
-            yield {
-                "type": "done",
-                "content": AgentResponse(
-                    content=final_content,
-                    agent_type="student_services",
-                    action_taken=action_taken
-                )
-            }
+                for char in final_content:
+                    yield {"type": "content", "content": char}
+                yield {
+                    "type": "done",
+                    "content": AgentResponse(
+                        content=final_content,
+                        agent_type="student_services",
+                        action_taken=None
+                    )
+                }
             
         except Exception as e:
             error_message = f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系学生事务中心。"

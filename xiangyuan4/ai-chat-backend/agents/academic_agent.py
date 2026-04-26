@@ -374,121 +374,6 @@ class AcademicAgent(BaseAgent):
             context += f"· [{r['title']}] {snippet}\n"
         return context
     
-    async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
-        """处理学业相关请求"""
-        
-        # 获取用户信息
-        user_info = context.get("user_info", {}) if context else {}
-        student_id = user_info.get("student_id")
-        full_name = user_info.get("full_name") or user_info.get("username")
-        
-        # 系统提示词
-        system_prompt = f"""你是文泽奇妙小AI的学业助手，专业、高效的学习伙伴。
-
-你的职责：
-- 课表查询：查看学生的课程安排
-- 成绩查询：查询各科成绩和GPA
-- 选课服务：帮助学生查询和选择课程
-- 学业规划：提供学业日历和重要时间节点
-- 学业政策咨询：回答学分、绩点、考试、毕业要求等相关政策问题
-
-工作准则：
-- 使用提供的工具函数完成任务
-- 获取工具结果后，用亲切自然的语言向学生解释和说明
-- 成绩、课表、课程列表等涉及具体数据的内容，必须完整保留并呈现所有原始信息（包括每一门课的名称、成绩、学分、时间、地点等），不要省略任何一条记录
-- 如已提供学号，直接使用该学号进行查询
-- 回复中适当使用表情符号，让语气更友好
-- 当用户询问学业政策、规章制度等信息时，请优先参考知识库内容作答
-- **严禁编造任何信息**：如果知识库或工具中没有相关信息，必须明确告知用户"这个问题我暂时无法确认，建议咨询教务处或查阅学校官网"
-- 不要猜测、不要推断、不要使用未经验证的信息
-
-特别注意：
-- 当用户提到"大一"、"大二"、"大三"、"大四"时，需要将其转换为具体的学期参数：
-  - 大一：2024-2025-1 和 2024-2025-2
-  - 大二：2025-2026-1 和 2025-2026-2
-  - 大三：2026-2027-1 和 2026-2027-2
-  - 大四：2027-2028-1 和 2027-2028-2
-- 当用户查询特定年级的成绩时，必须调用 query_grades 工具并传递相应的学期参数
-- 例如，查询"大二的成绩"时，应该分别查询 2025-2026-1 和 2025-2026-2 两个学期的成绩
-
-当前用户信息：
-- 姓名：{full_name}
-- 学号：{student_id}
-"""
-
-        # 检索知识库并注入上下文
-        knowledge_context = await self._build_knowledge_context(message)
-        if not knowledge_context:
-            knowledge_context = "\n\n【知识库检索结果】未找到与该问题相关的知识库内容。请注意：如果没有可靠信息来源，请不要编造答案。\n"
-        full_prompt = system_prompt + knowledge_context
-
-        # 构建消息列表
-        messages = [SystemMessage(content=full_prompt)]
-        
-        # 添加历史对话（使用传递的context中的历史记录）
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        # 添加当前消息
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            # 调用LLM（使用异步方法）
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            # 处理工具调用
-            if response.tool_calls:
-                # 执行工具调用
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    # 如果工具需要student_id参数，并且我们有用户学号，直接使用
-                    if 'student_id' in tool_args and not tool_args['student_id'] and student_id:
-                        tool_args['student_id'] = student_id
-                    
-                    # 找到对应的工具并执行
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            # 处理 ToolMessage 对象
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（使用异步方法）
-                final_messages = messages + [response] + tool_messages
-                final_response = await self.llm.ainvoke(final_messages)
-                final_content = final_response.content
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-            else:
-                final_content = response.content
-                action_taken = None
-            
-            return AgentResponse(
-                content=final_content,
-                agent_type="academic",
-                action_taken=action_taken
-            )
-
-        except Exception as e:
-            return AgentResponse(
-                content=f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系教务处。",
-                agent_type="academic",
-                action_taken="error"
-            )
-
     async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
         """流式处理学业相关请求，边生成边输出"""
         
@@ -568,26 +453,36 @@ class AcademicAgent(BaseAgent):
                             ))
                             break
                 
-                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（使用异步方法）
+                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（流式）
                 final_messages = messages + [response] + tool_messages
-                final_response = await self.llm.ainvoke(final_messages)
-                final_content = final_response.content
+                full_content = ""
+                async for chunk in self.llm.astream(final_messages):
+                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if content:
+                        full_content += content
+                        for char in content:
+                            yield {"type": "content", "content": char}
                 action_taken = f"执行了 {len(tool_messages)} 个工具操作"
+                yield {
+                    "type": "done",
+                    "content": AgentResponse(
+                        content=full_content,
+                        agent_type="academic",
+                        action_taken=action_taken
+                    )
+                }
             else:
                 final_content = response.content
-                action_taken = None
-            
-            for char in final_content:
-                yield {"type": "content", "content": char}
-            
-            yield {
-                "type": "done",
-                "content": AgentResponse(
-                    content=final_content,
-                    agent_type="academic",
-                    action_taken=action_taken
-                )
-            }
+                for char in final_content:
+                    yield {"type": "content", "content": char}
+                yield {
+                    "type": "done",
+                    "content": AgentResponse(
+                        content=final_content,
+                        agent_type="academic",
+                        action_taken=None
+                    )
+                }
             
         except Exception as e:
             yield {"type": "error", "content": f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系教务处。"}

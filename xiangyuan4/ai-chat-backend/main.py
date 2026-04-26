@@ -57,6 +57,7 @@ from agents.psychology_agent import PsychologyAgent
 from agents.policy_agent import PolicyAgent
 from agents.chat_agent import ChatAgent
 from session_manager import session_manager
+from env_utils import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
 
 # 导入认证路由和依赖
 from auth_routes import router as auth_router
@@ -65,6 +66,59 @@ from auth_utils import get_current_user
 from database import init_db, User, AsyncSessionLocal, KnowledgeBaseModel, UsageLog
 from rag_service import RAGService
 from sqlalchemy import select
+from jwxt_cli import JWXTClient
+
+async def generate_session_topic(conversation_history: list) -> str:
+    """
+    根据对话历史生成会话主题
+    
+    使用 DeepSeek LLM 提取简洁的中文标题，失败时回退到最近用户消息截断
+    """
+    try:
+        from langchain_deepseek import ChatDeepSeek
+        from langchain_core.messages import SystemMessage, HumanMessage
+        
+        llm = ChatDeepSeek(
+            model="deepseek-chat",
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+            temperature=0.3,
+            max_tokens=20
+        )
+        
+        # 取最近 4 条消息（2轮对话）作为上下文
+        recent = conversation_history[-4:]
+        history_text = "\n".join([
+            f"{'用户' if m.get('role') == 'user' else '助手'}: {m.get('content', '')[:80]}"
+            for m in recent
+        ])
+        
+        messages = [
+            SystemMessage(content="你是一个对话主题提取助手。请根据以下对话内容，生成一个不超过10个字的中文标题。直接返回标题文本，不要带引号、书名号或其他标点符号，不要有任何解释。"),
+            HumanMessage(content=history_text)
+        ]
+        
+        response = await llm.ainvoke(messages)
+        topic = response.content.strip()
+        # 去除常见标点
+        for char in ['"', "'", "「", "」", "《", "》", "【", "】", ":", "："]:
+            topic = topic.replace(char, "")
+        topic = topic.replace("标题：", "").replace("主题：", "").strip()
+        
+        if len(topic) > 15:
+            topic = topic[:15] + "..."
+        if not topic:
+            raise ValueError("生成的主题为空")
+        return topic
+    except Exception as e:
+        print(f"[TopicGen] LLM 生成主题失败: {e}")
+        # fallback: 取最近一条用户消息的前15字
+        for m in reversed(conversation_history):
+            if m.get("role") == "user":
+                content = m.get("content", "").strip()
+                return (content[:15] + "...") if len(content) > 15 else content
+        return "新对话"
+
 
 # 导入管理员路由
 from admin_routes import router as admin_router
@@ -171,7 +225,7 @@ async def stream_response(
                     "total": len(response_content)
                 }
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.005)
 
             end_chunk = {
                 "type": "done",
@@ -193,6 +247,7 @@ async def stream_response(
                         "content": result["content"]
                     }
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0)
                 elif result["type"] == "done":
                     agent_response = result["content"]
                     response_content = agent_response.content
@@ -238,6 +293,17 @@ async def stream_response(
                 await db.commit()
         except Exception as log_err:
             print(f"用量记录失败: {log_err}")
+        
+        # 周期性更新会话主题（每4条用户消息或第1条时更新）
+        try:
+            updated_history = await session_manager.get_conversation_history(session_id)
+            user_msg_count = sum(1 for m in updated_history if m.get("role") == "user")
+            if user_msg_count % 4 == 0 or user_msg_count == 1:
+                new_topic = await generate_session_topic(updated_history)
+                await session_manager.update_session_topic(session_id, new_topic)
+                print(f"[TopicUpdate] 会话 {session_id[:8]}... 主题更新为: {new_topic}")
+        except Exception as topic_err:
+            print(f"[TopicUpdate] 更新会话主题失败: {topic_err}")
 
     except Exception as e:
         error_chunk = {
@@ -423,22 +489,49 @@ async def chat_direct(agent_type: str, request: ChatRequest, current_user: Optio
         # 获取对话历史
         conversation_history = await session_manager.get_conversation_history(session_id)
         
-        # 调用智能体
-        agent_response = await agent.process(
+        # 调用智能体（统一使用 stream_process 并在内部收集结果）
+        response_content = ""
+        agent_response = None
+        async for result in agent.stream_process(
             message=request.message,
             session_id=session_id,
             context={"history": conversation_history}
-        )
+        ):
+            if result["type"] == "content":
+                response_content += result["content"]
+            elif result["type"] == "done":
+                agent_response = result["content"]
+            elif result["type"] == "error":
+                response_content = result["content"]
+        
+        # 优先使用 done 事件中封装的 AgentResponse，否则回退到收集的文本
+        if agent_response:
+            final_content = agent_response.content
+            action_taken = agent_response.action_taken
+        else:
+            final_content = response_content
+            action_taken = None
         
         # 保存对话历史
         await session_manager.add_message(session_id, "user", request.message)
-        await session_manager.add_message(session_id, "assistant", agent_response.content, agent_type)
+        await session_manager.add_message(session_id, "assistant", final_content, agent_type)
+        
+        # 周期性更新会话主题
+        try:
+            updated_history = await session_manager.get_conversation_history(session_id)
+            user_msg_count = sum(1 for m in updated_history if m.get("role") == "user")
+            if user_msg_count % 4 == 0 or user_msg_count == 1:
+                new_topic = await generate_session_topic(updated_history)
+                await session_manager.update_session_topic(session_id, new_topic)
+                print(f"[TopicUpdate] 会话 {session_id[:8]}... 主题更新为: {new_topic}")
+        except Exception as topic_err:
+            print(f"[TopicUpdate] 更新会话主题失败: {topic_err}")
         
         return ChatResponse(
-            response=agent_response.content,
+            response=final_content,
             session_id=session_id,
             agent_type=agent_type,
-            action_taken=agent_response.action_taken
+            action_taken=action_taken
         )
         
     except HTTPException:

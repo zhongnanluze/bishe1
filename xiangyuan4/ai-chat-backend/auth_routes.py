@@ -370,6 +370,10 @@ async def update_user_profile(
             update_data["student_id"] = profile_data.student_id
         if profile_data.avatar is not None:
             update_data["avatar"] = profile_data.avatar
+        if profile_data.jwxt_username is not None:
+            update_data["jwxt_username"] = profile_data.jwxt_username
+        if profile_data.jwxt_password is not None:
+            update_data["jwxt_password"] = profile_data.jwxt_password
         
         if update_data:
             await db.execute(

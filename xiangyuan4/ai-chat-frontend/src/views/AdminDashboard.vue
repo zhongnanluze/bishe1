@@ -282,35 +282,64 @@ watch(() => props.activeTab, () => {
   align-items: center;
   gap: 14px;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.6);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.5) 100%);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
-  backdrop-filter: blur(12px);
-  transition: all 0.3s ease;
+  backdrop-filter: blur(16px) saturate(1.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.overview-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(124, 58, 237, 0.2), rgba(79, 70, 229, 0.2));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.overview-card:hover::before {
+  opacity: 1;
 }
 
 .overview-card:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.3),
+    0 0 30px rgba(79, 70, 229, 0.1);
 }
 
 .card-icon {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
   flex-shrink: 0;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .card-value {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   color: #ffffff;
   margin: 0;
   line-height: 1.2;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
 }
 
 .card-label {
@@ -327,16 +356,41 @@ watch(() => props.activeTab, () => {
 }
 
 .chart-card {
-  background: rgba(15, 23, 42, 0.6);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.5) 100%);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
   padding: 20px;
-  backdrop-filter: blur(12px);
-  transition: all 0.3s ease;
+  backdrop-filter: blur(16px) saturate(1.2);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.chart-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(124, 58, 237, 0.15));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.chart-card:hover::before {
+  opacity: 1;
 }
 
 .chart-card:hover {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 8px 30px rgba(0, 0, 0, 0.3),
+    0 0 30px rgba(79, 70, 229, 0.08);
 }
 
 .chart-header {
@@ -346,8 +400,9 @@ watch(() => props.activeTab, () => {
 .chart-header h4 {
   font-size: 14px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #f1f5f9;
   margin: 0;
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
 }
 
 .chart {

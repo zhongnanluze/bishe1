@@ -101,11 +101,28 @@ onMounted(() => {
 .admin-sidebar {
   width: 260px;
   flex-shrink: 0;
-  background: rgba(15, 23, 42, 0.9);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.85) 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow: 
+    0 0 40px rgba(79, 70, 229, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-sidebar::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: -20%;
+  width: 60%;
+  height: 40%;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.15) 0%, transparent 70%);
+  filter: blur(60px);
+  pointer-events: none;
 }
 
 .sidebar-header {
@@ -117,15 +134,27 @@ onMounted(() => {
 }
 
 .admin-logo {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, #22d3ee 0%, #4f46e5 50%, #7c3aed 100%);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
+  box-shadow: 
+    0 0 20px rgba(79, 70, 229, 0.4),
+    0 0 40px rgba(34, 211, 238, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-logo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.25) 50%, transparent 60%);
+  animation: shimmer 3s ease-in-out infinite;
 }
 
 .admin-brand h2 {
@@ -170,9 +199,27 @@ onMounted(() => {
 }
 
 .menu-item.active {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.9) 0%, rgba(124, 58, 237, 0.9) 100%);
   color: #ffffff;
-  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.25);
+  box-shadow: 
+    0 4px 20px rgba(79, 70, 229, 0.4),
+    0 0 30px rgba(124, 58, 237, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.menu-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #22d3ee, #4f46e5);
+  border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.5);
 }
 
 .menu-icon {

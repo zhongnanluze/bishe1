@@ -26,21 +26,6 @@ class BaseAgent(ABC):
         self.conversation_history: List[Dict[str, str]] = []
 
     @abstractmethod
-    async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
-        """
-        处理用户消息（非流式）
-
-        Args:
-            message: 用户输入消息
-            session_id: 会话ID
-            context: 上下文信息
-
-        Returns:
-            AgentResponse: 智能体响应
-        """
-        pass
-
-    @abstractmethod
     async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
         """
         流式处理用户消息，边生成边输出

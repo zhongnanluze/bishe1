@@ -261,94 +261,6 @@ class PolicyAgent(BaseAgent):
             context += f"· [{r['title']}] {snippet}\n"
         return context
     
-    async def process(self, message: str, session_id: str, context: Dict = None) -> AgentResponse:
-        """处理制度查询相关请求"""
-        
-        system_prompt = """你是文泽奇妙小AI的制度查询助手，一位严谨、清晰且耐心的校园政策专家。你的职责是帮助学生快速准确地了解学校各项规章制度。
-
-你的职责：
-- 学籍制度：入学、注册、转专业、休学、退学、毕业、学位授予等
-- 奖助学金：国家奖学金、助学金、校级奖学金、勤工助学等政策
-- 宿舍管理：作息、访客、安全、卫生、调换等规定
-- 考试纪律：考场规则、违纪认定、处分等级、申诉程序
-- 违纪处分：处分种类、期限、解除条件、申诉渠道
-- 部门查询：提供相关办事部门的地址、电话、办公时间
-
-服务风格：
-- 表述准确、条理清晰，使用编号和分点
-- 引用制度时注明"根据学校XX规定"
-- 对于不确定的内容，坦诚说明并建议咨询相关部门
-- 语气正式但不失亲切
-
-重要准则：
-- 优先使用知识库中的最新制度信息
-- 制度可能存在更新，建议学生以学校官网或官方文件为准
-- 涉及个人具体情况的制度适用问题，建议咨询相关部门
-- **严禁编造任何制度条款**：如果知识库和工具中都没有相关信息，必须明确告知用户"该制度信息我暂时无法确认，建议咨询相关部门或查阅学校官网最新文件"
-- 不要猜测、不要推断、不要补充未经验证的细节
-- 工具函数返回的参考信息仅为示例，必须明确提示用户"以下信息仅供参考，请以学校最新官方文件为准"
-
-请使用提供的工具函数来查询制度信息，确保回答有据可依。"""
-
-        knowledge_context = await self._build_knowledge_context(message)
-        if not knowledge_context:
-            knowledge_context = "\n\n【知识库检索结果】未找到与该问题相关的制度内容。请注意：如果没有可靠信息来源，请不要编造任何制度条款或政策细节。\n"
-        full_prompt = system_prompt + knowledge_context
-
-        messages = [SystemMessage(content=full_prompt)]
-        
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            if response.tool_calls:
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                final_messages = messages + [response] + tool_messages
-                final_response = await self.llm.ainvoke(final_messages)
-                final_content = final_response.content
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-            else:
-                final_content = response.content
-                action_taken = None
-            
-            return AgentResponse(
-                content=final_content,
-                agent_type="policy",
-                action_taken=action_taken
-            )
-
-        except Exception as e:
-            return AgentResponse(
-                content=f"抱歉，查询制度信息时出现错误：{str(e)}。建议直接访问学校官网或拨打相关部门电话咨询。",
-                agent_type="policy",
-                action_taken="error"
-            )
-
     async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
         """流式处理制度查询相关请求"""
         
@@ -414,24 +326,34 @@ class PolicyAgent(BaseAgent):
                             break
                 
                 final_messages = messages + [response] + tool_messages
-                final_response = await self.llm.ainvoke(final_messages)
-                final_content = final_response.content
+                full_content = ""
+                async for chunk in self.llm.astream(final_messages):
+                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if content:
+                        full_content += content
+                        for char in content:
+                            yield {"type": "content", "content": char}
                 action_taken = f"执行了 {len(tool_messages)} 个工具操作"
+                yield {
+                    "type": "done",
+                    "content": AgentResponse(
+                        content=full_content,
+                        agent_type="policy",
+                        action_taken=action_taken
+                    )
+                }
             else:
                 final_content = response.content
-                action_taken = None
-            
-            for char in final_content:
-                yield {"type": "content", "content": char}
-            
-            yield {
-                "type": "done",
-                "content": AgentResponse(
-                    content=final_content,
-                    agent_type="policy",
-                    action_taken=action_taken
-                )
-            }
+                for char in final_content:
+                    yield {"type": "content", "content": char}
+                yield {
+                    "type": "done",
+                    "content": AgentResponse(
+                        content=final_content,
+                        agent_type="policy",
+                        action_taken=None
+                    )
+                }
             
         except Exception as e:
             error_message = f"抱歉，查询制度信息时出现错误：{str(e)}。建议直接访问学校官网或拨打相关部门电话咨询。"

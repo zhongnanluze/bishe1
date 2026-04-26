@@ -6,6 +6,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column, String, DateTime, Boolean, Integer, Text
+from sqlalchemy.dialects.mysql import LONGTEXT
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -56,12 +57,14 @@ class User(Base):
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
     student_id = Column(String(20), unique=True, nullable=True, comment="学号")
     full_name = Column(String(50), nullable=True, comment="真实姓名")
-    avatar = Column(String(255), nullable=True, comment="头像URL")
+    avatar = Column(LONGTEXT, nullable=True, comment="头像Base64或URL")
     is_active = Column(Boolean, default=True, comment="是否激活")
     is_admin = Column(Boolean, default=False, comment="是否管理员")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     last_login = Column(DateTime, nullable=True, comment="最后登录时间")
+    jwxt_username = Column(String(50), nullable=True, comment="教务系统账号")
+    jwxt_password = Column(String(255), nullable=True, comment="教务系统密码")
 
 
 class SessionModel(Base):

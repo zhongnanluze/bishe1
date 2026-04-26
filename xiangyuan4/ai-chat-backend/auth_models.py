@@ -59,6 +59,8 @@ class UserInfoResponse(BaseModel):
     student_id: Optional[str] = Field(None, description="学号")
     full_name: Optional[str] = Field(None, description="真实姓名")
     avatar: Optional[str] = Field(None, description="头像URL")
+    jwxt_username: Optional[str] = Field(None, description="教务系统账号")
+    jwxt_password: Optional[str] = Field(None, description="教务系统密码")
     is_active: bool = Field(..., description="是否激活")
     is_admin: bool = Field(..., description="是否管理员")
     created_at: Optional[datetime] = Field(None, description="创建时间")
@@ -75,6 +77,8 @@ class UserProfileUpdateRequest(BaseModel):
     email: Optional[EmailStr] = Field(None, description="邮箱")
     student_id: Optional[str] = Field(None, max_length=20, description="学号")
     avatar: Optional[str] = Field(None, description="头像URL")
+    jwxt_username: Optional[str] = Field(None, max_length=50, description="教务系统账号")
+    jwxt_password: Optional[str] = Field(None, max_length=255, description="教务系统密码")
 
 
 class AuthResponse(BaseModel):
@@ -105,5 +109,7 @@ class CurrentUser(BaseModel):
     student_id: Optional[str] = Field(None, description="学号")
     full_name: Optional[str] = Field(None, description="真实姓名")
     avatar: Optional[str] = Field(None, description="头像URL")
+    jwxt_username: Optional[str] = Field(None, description="教务系统账号")
+    jwxt_password: Optional[str] = Field(None, description="教务系统密码")
     created_at: Optional[datetime] = Field(None, description="创建时间")
     last_login: Optional[datetime] = Field(None, description="最后登录时间")
