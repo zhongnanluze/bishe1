@@ -977,7 +977,7 @@ body {
 .sidebar .flex-1 {
   overflow-y: auto;
   flex: 1;
-  max-height: calc(100vh - 180px);
+  max-height: calc(100vh - 280px);
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.5) rgba(15, 23, 42, 0.3);
 }
@@ -1585,6 +1585,7 @@ body {
     0 4px 20px rgba(0, 0, 0, 0.2),
     inset 0 -1px 0 rgba(255, 255, 255, 0.03);
   position: relative;
+  z-index: 20;
 }
 
 .chat-header::after {
@@ -1687,6 +1688,7 @@ body {
   padding: 12px 18px;
   color: #e2e8f0;
   cursor: pointer;
+  z-index: 1000;
   transition: all 0.3s ease;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   position: relative;

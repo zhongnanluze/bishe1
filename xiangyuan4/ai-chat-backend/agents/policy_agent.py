@@ -5,9 +5,8 @@
 
 from typing import Dict, Optional, AsyncGenerator
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
-from .base_agent import BaseAgent, AgentResponse
+from .base_agent import BaseAgent
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +20,7 @@ from rag_service import RAGService
 def query_policy(category: str, keyword: str = None) -> str:
     """
     查询学校规章制度（模拟数据库查询）
-    
+
     Args:
         category: 制度类别（学籍管理/奖助学金/宿舍管理/考试纪律/学位授予/违纪处分/社会实践）
         keyword: 关键词（可选）
@@ -196,7 +195,7 @@ def query_policy(category: str, keyword: str = None) -> str:
    - 优秀成果可推荐参加省级、国家级评选
         """
     }
-    
+
     result = policies.get(category)
     if result:
         result = result + "\n\n⚠️ 以上制度摘要仅供参考，具体条款以学校最新官方文件为准。如有疑问，建议咨询相关部门。"
@@ -211,7 +210,7 @@ def query_policy(category: str, keyword: str = None) -> str:
 def query_department_contact(department: str) -> str:
     """
     查询相关部门联系方式
-    
+
     Args:
         department: 部门名称（教务处/学生处/宿管中心/财务处/图书馆/保卫处/心理咨询中心）
     """
@@ -224,46 +223,27 @@ def query_department_contact(department: str) -> str:
         "保卫处": "📍 校门口东侧 | 📞 010-66667777（24小时）| 📧 bwc@university.edu.cn",
         "心理咨询中心": "📍 大学生活动中心301 | 📞 010-87654321 | 📧 counseling@university.edu.cn | ⏰ 9:00-17:00"
     }
-    
+
     return contacts.get(department, f"暂无【{department}】的联系方式。建议拨打学校总机查询：010-88889999")
 
 
 class PolicyAgent(BaseAgent):
     """制度查询智能体"""
-    
+
     def __init__(self):
-        super().__init__(
-            name="制度查询智能体",
-            description="查询学校各类规章制度、政策文件、管理办法和相关办事部门信息"
-        )
-        self.llm = ChatDeepSeek(
+        llm = ChatDeepSeek(
             model="deepseek-chat",
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             temperature=0.2,
             max_tokens=2048
         )
-        self.tools = [
+
+        tools = [
             query_policy,
             query_department_contact
         ]
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        self.rag_service = RAGService()
 
-    async def _build_knowledge_context(self, query: str) -> str:
-        """检索知识库并格式化上下文"""
-        results = await self.rag_service.search(query, top_k=3, agent_type="policy")
-        if not results:
-            return ""
-        context = "\n\n【知识库参考信息】\n"
-        for r in results:
-            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
-            context += f"· [{r['title']}] {snippet}\n"
-        return context
-    
-    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
-        """流式处理制度查询相关请求"""
-        
         system_prompt = """你是文泽奇妙小AI的制度查询助手，一位严谨、清晰且耐心的校园政策专家。你的职责是帮助学生快速准确地了解学校各项规章制度。
 
 你的职责：
@@ -289,73 +269,29 @@ class PolicyAgent(BaseAgent):
 
 请使用提供的工具函数来查询制度信息，确保回答有据可依。"""
 
-        knowledge_context = await self._build_knowledge_context(message)
-        full_prompt = system_prompt + knowledge_context
+        super().__init__(
+            name="制度查询智能体",
+            description="查询学校各类规章制度、政策文件、管理办法和相关办事部门信息",
+            llm=llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            agent_type="policy"
+        )
+        self.rag_service = RAGService()
 
-        messages = [SystemMessage(content=full_prompt)]
-        
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            if response.tool_calls:
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                final_messages = messages + [response] + tool_messages
-                full_content = ""
-                async for chunk in self.llm.astream(final_messages):
-                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                    if content:
-                        full_content += content
-                        for char in content:
-                            yield {"type": "content", "content": char}
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=full_content,
-                        agent_type="policy",
-                        action_taken=action_taken
-                    )
-                }
-            else:
-                final_content = response.content
-                for char in final_content:
-                    yield {"type": "content", "content": char}
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=final_content,
-                        agent_type="policy",
-                        action_taken=None
-                    )
-                }
-            
-        except Exception as e:
-            error_message = f"抱歉，查询制度信息时出现错误：{str(e)}。建议直接访问学校官网或拨打相关部门电话咨询。"
-            yield {"type": "content", "content": error_message}
-            yield {"type": "done", "content": AgentResponse(content=error_message, agent_type="policy", action_taken="error")}
+    async def _build_knowledge_context(self, query: str) -> str:
+        """检索知识库并格式化上下文"""
+        results = await self.rag_service.search(query, top_k=3, agent_type="policy")
+        if not results:
+            return ""
+        context = "\n\n【知识库参考信息】\n"
+        for r in results:
+            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
+            context += f"· [{r['title']}] {snippet}\n"
+        return context
+
+    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
+        """流式处理制度查询相关请求"""
+        knowledge_context = await self._build_knowledge_context(message)
+        async for chunk in self._run_stream(message, session_id, context, knowledge_context):
+            yield chunk

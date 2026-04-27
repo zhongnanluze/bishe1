@@ -5,9 +5,8 @@
 
 from typing import Dict, Optional, AsyncGenerator
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
-from .base_agent import BaseAgent, AgentResponse
+from .base_agent import BaseAgent
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +20,7 @@ from rag_service import RAGService
 def replace_id_card(student_id: str, id_card_type: str, reason: str) -> str:
     """
     补办证件
-    
+
     Args:
         student_id: 学号
         id_card_type: 证件类型（校园卡/学生证/身份证）
@@ -34,7 +33,7 @@ def replace_id_card(student_id: str, id_card_type: str, reason: str) -> str:
 def pay_tuition(student_id: str, semester: str, amount: float, payment_method: str) -> str:
     """
     缴纳学费
-    
+
     Args:
         student_id: 学号
         semester: 学期（如：2024-2025-1）
@@ -48,7 +47,7 @@ def pay_tuition(student_id: str, semester: str, amount: float, payment_method: s
 def recharge_meal_card(student_id: str, amount: float, payment_method: str) -> str:
     """
     饭卡充值
-    
+
     Args:
         student_id: 学号
         amount: 充值金额（元）
@@ -61,7 +60,7 @@ def recharge_meal_card(student_id: str, amount: float, payment_method: str) -> s
 def query_process(affair_type: str) -> str:
     """
     查询办事流程
-    
+
     Args:
         affair_type: 事务类型（如：请假/休学/转专业/奖学金申请等）
     """
@@ -126,7 +125,7 @@ def query_process(affair_type: str) -> str:
 - 其他特殊情况
         """
     }
-    
+
     result = processes.get(affair_type)
     if result:
         return result + "\n\n⚠️ 以上流程仅供参考，具体要求、材料和时限请以学校最新规定或学生事务中心告知为准。"
@@ -159,43 +158,24 @@ def query_affairs_center_info() -> str:
 
 class StudentServicesAgent(BaseAgent):
     """学生办事智能体"""
-    
+
     def __init__(self):
-        super().__init__(
-            name="学生办事智能体",
-            description="处理学生办事相关需求，包括证件补办、学费缴纳、饭卡充值、办事流程查询等"
-        )
-        self.llm = ChatDeepSeek(
+        llm = ChatDeepSeek(
             model="deepseek-chat",
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             temperature=0.3,
             max_tokens=2048
         )
-        self.tools = [
+
+        tools = [
             replace_id_card,
             pay_tuition,
             recharge_meal_card,
             query_process,
             query_affairs_center_info
         ]
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        self.rag_service = RAGService()
 
-    async def _build_knowledge_context(self, query: str) -> str:
-        """检索知识库并格式化上下文"""
-        results = await self.rag_service.search(query, top_k=3, agent_type="student_services")
-        if not results:
-            return ""
-        context = "\n\n【知识库参考信息】\n"
-        for r in results:
-            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
-            context += f"· [{r['title']}] {snippet}\n"
-        return context
-    
-    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
-        """流式处理学生办事相关请求，边生成边输出"""
-        
         system_prompt = """你是文泽奇妙小AI的学生办事助手，一个友善、热情且专业的校园服务专家。你喜欢用轻松愉快的语气与学生交流，让校园生活变得更加便捷。
 
 你的职责：
@@ -222,73 +202,29 @@ class StudentServicesAgent(BaseAgent):
 
 请使用提供的工具函数来帮助学生完成事务办理，让学生感受到校园服务的温暖和便捷！"""
 
-        knowledge_context = await self._build_knowledge_context(message)
-        full_prompt = system_prompt + knowledge_context
+        super().__init__(
+            name="学生办事智能体",
+            description="处理学生办事相关需求，包括证件补办、学费缴纳、饭卡充值、办事流程查询等",
+            llm=llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            agent_type="student_services"
+        )
+        self.rag_service = RAGService()
 
-        messages = [SystemMessage(content=full_prompt)]
-        
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            if response.tool_calls:
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                final_messages = messages + [response] + tool_messages
-                full_content = ""
-                async for chunk in self.llm.astream(final_messages):
-                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                    if content:
-                        full_content += content
-                        for char in content:
-                            yield {"type": "content", "content": char}
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=full_content,
-                        agent_type="student_services",
-                        action_taken=action_taken
-                    )
-                }
-            else:
-                final_content = response.content
-                for char in final_content:
-                    yield {"type": "content", "content": char}
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=final_content,
-                        agent_type="student_services",
-                        action_taken=None
-                    )
-                }
-            
-        except Exception as e:
-            error_message = f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系学生事务中心。"
-            yield {"type": "content", "content": error_message}
-            yield {"type": "done", "content": AgentResponse(content=error_message, agent_type="student_services", action_taken="error")}
+    async def _build_knowledge_context(self, query: str) -> str:
+        """检索知识库并格式化上下文"""
+        results = await self.rag_service.search(query, top_k=3, agent_type="student_services")
+        if not results:
+            return ""
+        context = "\n\n【知识库参考信息】\n"
+        for r in results:
+            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
+            context += f"· [{r['title']}] {snippet}\n"
+        return context
+
+    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
+        """流式处理学生办事相关请求"""
+        knowledge_context = await self._build_knowledge_context(message)
+        async for chunk in self._run_stream(message, session_id, context, knowledge_context):
+            yield chunk

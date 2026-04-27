@@ -5,9 +5,8 @@
 
 from typing import Dict, Optional, AsyncGenerator
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
-from .base_agent import BaseAgent, AgentResponse
+from .base_agent import BaseAgent
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +20,7 @@ from rag_service import RAGService
 def self_assessment_guide(issue_type: str) -> str:
     """
     提供心理自评指导
-    
+
     Args:
         issue_type: 问题类型（焦虑/抑郁/压力/睡眠/人际）
     """
@@ -110,7 +109,7 @@ def self_assessment_guide(issue_type: str) -> str:
 📌 人际困扰是大学生活中的常见挑战，心理咨询中心提供人际团体辅导，欢迎了解。
         """
     }
-    
+
     return guides.get(issue_type, f"暂无【{issue_type}】的专项指导。建议预约心理咨询师进行一对一评估。")
 
 
@@ -118,7 +117,7 @@ def self_assessment_guide(issue_type: str) -> str:
 def book_counseling(student_id: str, preferred_time: str, issue_brief: str) -> str:
     """
     预约心理咨询（模拟）
-    
+
     Args:
         student_id: 学号
         preferred_time: 期望时间（如：下周三下午）
@@ -154,41 +153,22 @@ def emergency_help() -> str:
 
 class PsychologyAgent(BaseAgent):
     """心理咨询智能体"""
-    
+
     def __init__(self):
-        super().__init__(
-            name="心理咨询智能体",
-            description="提供心理支持、情绪疏导、心理健康知识和心理咨询预约服务"
-        )
-        self.llm = ChatDeepSeek(
+        llm = ChatDeepSeek(
             model="deepseek-chat",
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             temperature=0.4,
             max_tokens=2048
         )
-        self.tools = [
+
+        tools = [
             self_assessment_guide,
             book_counseling,
             emergency_help
         ]
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        self.rag_service = RAGService()
 
-    async def _build_knowledge_context(self, query: str) -> str:
-        """检索知识库并格式化上下文"""
-        results = await self.rag_service.search(query, top_k=3, agent_type="psychology")
-        if not results:
-            return ""
-        context = "\n\n【知识库参考信息】\n"
-        for r in results:
-            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
-            context += f"· [{r['title']}] {snippet}\n"
-        return context
-    
-    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
-        """流式处理心理咨询相关请求"""
-        
         system_prompt = """你是一位温暖、专业的心理陪伴助手。你的核心定位是提供非临床的心理支持和情绪陪伴。
 【角色设定】
 - 语气：温暖、共情、耐心、非评判
@@ -219,73 +199,29 @@ class PsychologyAgent(BaseAgent):
 【知识库引用】
 回答问题时，优先基于提供的知识库内容。如果知识库中没有相关信息，坦诚告知，不编造。"""
 
-        knowledge_context = await self._build_knowledge_context(message)
-        full_prompt = system_prompt + knowledge_context
+        super().__init__(
+            name="心理咨询智能体",
+            description="提供心理支持、情绪疏导、心理健康知识和心理咨询预约服务",
+            llm=llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            agent_type="psychology"
+        )
+        self.rag_service = RAGService()
 
-        messages = [SystemMessage(content=full_prompt)]
-        
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            if response.tool_calls:
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                final_messages = messages + [response] + tool_messages
-                full_content = ""
-                async for chunk in self.llm.astream(final_messages):
-                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                    if content:
-                        full_content += content
-                        for char in content:
-                            yield {"type": "content", "content": char}
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=full_content,
-                        agent_type="psychology",
-                        action_taken=action_taken
-                    )
-                }
-            else:
-                final_content = response.content
-                for char in final_content:
-                    yield {"type": "content", "content": char}
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=final_content,
-                        agent_type="psychology",
-                        action_taken=None
-                    )
-                }
-            
-        except Exception as e:
-            error_message = f"抱歉，处理您的请求时出现错误：{str(e)}。如果你正经历困扰，请直接拨打心理咨询中心热线：010-87654321。"
-            yield {"type": "content", "content": error_message}
-            yield {"type": "done", "content": AgentResponse(content=error_message, agent_type="psychology", action_taken="error")}
+    async def _build_knowledge_context(self, query: str) -> str:
+        """检索知识库并格式化上下文"""
+        results = await self.rag_service.search(query, top_k=3, agent_type="psychology")
+        if not results:
+            return ""
+        context = "\n\n【知识库参考信息】\n"
+        for r in results:
+            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
+            context += f"· [{r['title']}] {snippet}\n"
+        return context
+
+    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
+        """流式处理心理咨询相关请求"""
+        knowledge_context = await self._build_knowledge_context(message)
+        async for chunk in self._run_stream(message, session_id, context, knowledge_context):
+            yield chunk

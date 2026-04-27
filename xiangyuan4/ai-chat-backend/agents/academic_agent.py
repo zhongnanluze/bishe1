@@ -5,9 +5,8 @@
 
 from typing import Dict, Optional, List, AsyncGenerator
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
-from .base_agent import BaseAgent, AgentResponse
+from .base_agent import BaseAgent
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -72,7 +71,7 @@ def get_jwxt_client():
 def query_course_schedule(student_id: str, xn: str = None, xq: int = None) -> str:
     """
     查询学生课表
-    
+
     Args:
         student_id: 学号
         xn: 学年（可选，如：2024-2025）
@@ -88,19 +87,19 @@ def query_course_schedule(student_id: str, xn: str = None, xq: int = None) -> st
                 return f"无法获取{student_id}的课表，请检查是否已登录教务系统"
             except Exception as e:
                 return f"查询课表失败：{str(e)}"
-    
+
     # 如果无法使用真实系统，回退到模拟数据
     if student_id not in STUDENT_COURSES_DB:
         return f"未找到学号 {student_id} 的选课记录。"
-    
+
     course_codes = STUDENT_COURSES_DB[student_id]
     courses_info = []
-    
+
     for code in course_codes:
         if code in COURSES_DB:
             course = COURSES_DB[code]
             courses_info.append(f"📚 {course['name']} ({code})\n   ⏰ {course['time']}\n   📍 {course['location']}\n   👨‍🏫 {course['teacher']}\n   📝 {course['credits']}学分")
-    
+
     return f"【{student_id} 的课表】\n\n" + "\n\n".join(courses_info) + "\n\n⚠️ 以上为模拟示例数据，请以教务系统实际查询结果为准。"
 
 
@@ -108,7 +107,7 @@ def query_course_schedule(student_id: str, xn: str = None, xq: int = None) -> st
 def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int = None) -> str:
     """
     查询学生成绩
-    
+
     Args:
         student_id: 学号
         semester: 学期（可选，如：2024-2025-1）
@@ -121,10 +120,8 @@ def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int 
             try:
                 grades = client.get_grades(xn=xn, xq=xq)
                 if grades:
-                    # 格式化输出成绩
                     client.print_grades(grades)
 
-                    # 构建成绩信息markdown表格
                     result = f"## {student_id} 的成绩单\n\n"
                     result += "| 学期 | 课程名称 | 成绩 |\n"
                     result += "|------|---------|------|\n"
@@ -137,10 +134,8 @@ def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int 
                                 course_name = row[3]
                                 score = row[5]
 
-                                # 如果指定了学期，只保留匹配的行
                                 if semester and semester not in str(term):
                                     continue
-                                # 也支持按 xn/xq 过滤（兼容传入拆分参数的情况）
                                 if xn and xn not in str(term):
                                     continue
                                 if xq is not None and str(xq) not in str(term):
@@ -151,7 +146,6 @@ def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int 
                             except:
                                 pass
 
-                    # 如果过滤后没有结果，给个提示
                     if filtered_count == 0 and (semester or xn or xq is not None):
                         return f"未找到 {student_id} 在指定学期的成绩记录（学期：{semester or xn + '-' + str(xq)}）。请确认学期信息是否正确。"
 
@@ -159,24 +153,23 @@ def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int 
                 return f"无法获取{student_id}的成绩，请检查是否已登录教务系统"
             except Exception as e:
                 return f"查询成绩失败：{str(e)}"
-    
+
     # 如果无法使用真实系统，回退到模拟数据
     if student_id not in GRADES_DB:
         return f"未找到学号 {student_id} 的成绩记录。"
-    
+
     grades = GRADES_DB[student_id]
-    
+
     if semester:
         grades = {k: v for k, v in grades.items() if v["semester"] == semester}
-    
+
     if not grades:
         return f"未找到该学期的成绩记录。"
-    
-    # 构建markdown表格
+
     result = f"## {student_id} 的成绩单\n\n"
     result += "| 课程名称 | 成绩 | GPA |\n"
     result += "|---------|------|-----|\n"
-    
+
     total_gpa = 0
     total_credits = 0
     for code, info in grades.items():
@@ -187,11 +180,11 @@ def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int 
         total_credits += credits
 
     avg_gpa = total_gpa / total_credits if total_credits > 0 else 0
-    
+
     result += f"\n### 统计信息\n"
     result += f"- 平均GPA：{avg_gpa:.2f}\n"
     result += f"- 总学分：{total_credits}\n"
-    
+
     return result
 
 
@@ -199,30 +192,30 @@ def query_grades(student_id: str, semester: str = None, xn: str = None, xq: int 
 def search_courses(keyword: str = None, course_type: str = None) -> str:
     """
     搜索可选课程
-    
+
     Args:
         keyword: 关键词（课程名或课程代码）
         course_type: 课程类型（可选：专业课/通识课/选修课）
     """
     results = []
-    
+
     for code, course in COURSES_DB.items():
         if keyword and keyword.upper() not in code and keyword not in course["name"]:
             continue
-        
+
         remaining = course["capacity"] - course["enrolled"]
         status = "🟢 可选" if remaining > 0 else "🔴 已满"
-        
+
         results.append(
             f"📚 {course['name']} ({code})\n"
             f"   ⏰ {course['time']} | 📍 {course['location']}\n"
             f"   👨‍🏫 {course['teacher']} | 📝 {course['credits']}学分\n"
             f"   👥 剩余名额：{remaining}/{course['capacity']} {status}"
         )
-    
+
     if not results:
         return "未找到符合条件的课程。"
-    
+
     return "【可选课程列表】\n\n" + "\n\n".join(results)
 
 
@@ -230,30 +223,29 @@ def search_courses(keyword: str = None, course_type: str = None) -> str:
 def select_course(student_id: str, course_code: str) -> str:
     """
     学生选课
-    
+
     Args:
         student_id: 学号
         course_code: 课程代码
     """
     if course_code not in COURSES_DB:
         return f"课程代码 {course_code} 不存在。"
-    
+
     course = COURSES_DB[course_code]
     remaining = course["capacity"] - course["enrolled"]
-    
+
     if remaining <= 0:
         return f"【选课失败】\n课程 {course['name']} 已满员，请选择其他课程。"
-    
-    # 模拟选课成功
+
     if student_id not in STUDENT_COURSES_DB:
         STUDENT_COURSES_DB[student_id] = []
-    
+
     if course_code in STUDENT_COURSES_DB[student_id]:
         return f"【提示】\n您已经选了课程 {course['name']}，无需重复选择。"
-    
+
     COURSES_DB[course_code]["enrolled"] += 1
     STUDENT_COURSES_DB[student_id].append(course_code)
-    
+
     return f"【选课成功】✅\n\n课程：{course['name']} ({course_code})\n时间：{course['time']}\n地点：{course['location']}\n学分：{course['credits']}\n\n请按时上课！"
 
 
@@ -261,25 +253,24 @@ def select_course(student_id: str, course_code: str) -> str:
 def drop_course(student_id: str, course_code: str) -> str:
     """
     学生退课
-    
+
     Args:
         student_id: 学号
         course_code: 课程代码
     """
     if student_id not in STUDENT_COURSES_DB:
         return f"未找到学号 {student_id} 的选课记录。"
-    
+
     if course_code not in STUDENT_COURSES_DB[student_id]:
         return f"您未选择课程 {course_code}。"
-    
+
     course = COURSES_DB.get(course_code, {})
     course_name = course.get("name", course_code)
-    
-    # 模拟退课
+
     STUDENT_COURSES_DB[student_id].remove(course_code)
     if course_code in COURSES_DB:
         COURSES_DB[course_code]["enrolled"] -= 1
-    
+
     return f"【退课成功】✅\n\n已退选课程：{course_name} ({course_code})\n\n注意：退课后该课程的学分将不计入本学期。"
 
 
@@ -314,44 +305,40 @@ def get_academic_calendar() -> str:
 def calculate_gpa(student_id: str) -> str:
     """
     计算学生GPA
-    
+
     Args:
         student_id: 学号
     """
     if student_id not in GRADES_DB:
         return f"未找到学号 {student_id} 的成绩记录。"
-    
+
     grades = GRADES_DB[student_id]
     total_gpa_points = 0
     total_credits = 0
-    
+
     for code, info in grades.items():
         credits = COURSES_DB.get(code, {}).get("credits", 0)
         total_gpa_points += info['gpa'] * credits
         total_credits += credits
-    
+
     gpa = total_gpa_points / total_credits if total_credits > 0 else 0
-    
+
     return f"【{student_id} 学业统计】\n\n总学分：{total_credits}\n平均GPA：{gpa:.2f}\n\nGPA等级：\n- 4.0：优秀 (90-100分)\n- 3.7：良好 (85-89分)\n- 3.3：中等 (82-84分)\n- 3.0：及格 (78-81分)\n- 2.7：及格 (75-77分)\n\n⚠️ 以上为模拟示例数据，请以教务系统实际查询结果为准。"
 
 
 class AcademicAgent(BaseAgent):
     """学生学业智能体"""
-    
+
     def __init__(self):
-        super().__init__(
-            name="学生学业智能体",
-            description="处理学生学业相关需求，包括选课、课表查询、成绩查询、学业规划等"
-        )
-        self.llm = ChatDeepSeek(
+        llm = ChatDeepSeek(
             model="deepseek-chat",
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             temperature=0.3,
             max_tokens=2048
         )
-        # 绑定工具
-        self.tools = [
+
+        tools = [
             query_course_schedule,
             query_grades,
             search_courses,
@@ -360,28 +347,8 @@ class AcademicAgent(BaseAgent):
             get_academic_calendar,
             calculate_gpa
         ]
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        self.rag_service = RAGService()
 
-    async def _build_knowledge_context(self, query: str) -> str:
-        """检索知识库并格式化上下文"""
-        results = await self.rag_service.search(query, top_k=3, agent_type="academic")
-        if not results:
-            return ""
-        context = "\n\n【知识库参考信息】\n"
-        for r in results:
-            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
-            context += f"· [{r['title']}] {snippet}\n"
-        return context
-    
-    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
-        """流式处理学业相关请求，边生成边输出"""
-        
-        user_info = context.get("user_info", {}) if context else {}
-        student_id = user_info.get("student_id")
-        full_name = user_info.get("full_name") or user_info.get("username")
-        
-        system_prompt = f"""你是文泽奇妙小AI的学业助手，专业、高效的学习伙伴。
+        system_prompt = """你是文泽奇妙小AI的学业助手，专业、高效的学习伙伴。
 
 你的职责：
 - 课表查询：查看学生的课程安排
@@ -413,76 +380,41 @@ class AcademicAgent(BaseAgent):
 - 学号：{student_id}
 """
 
-        # 检索知识库并注入上下文
-        knowledge_context = await self._build_knowledge_context(message)
-        full_prompt = system_prompt + knowledge_context
+        super().__init__(
+            name="学生学业智能体",
+            description="处理学生学业相关需求，包括选课、课表查询、成绩查询、学业规划等",
+            llm=llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            agent_type="academic"
+        )
+        self.rag_service = RAGService()
 
-        messages = [SystemMessage(content=full_prompt)]
-        
-        conversation_history = []
-        if context and hasattr(context, 'get'):
-            conversation_history = context.get("history", [])
-        for hist in conversation_history:
-            if hist["role"] == "user":
-                messages.append(HumanMessage(content=hist["content"]))
-            else:
-                messages.append(AIMessage(content=hist["content"]))
-        
-        messages.append(HumanMessage(content=message))
-        
-        try:
-            response = await self.llm_with_tools.ainvoke(messages)
-            
-            if response.tool_calls:
-                tool_messages = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call['args']
-                    
-                    if 'student_id' in tool_args and not tool_args['student_id'] and student_id:
-                        tool_args['student_id'] = student_id
-                    
-                    for tool_func in self.tools:
-                        if tool_func.name == tool_name:
-                            result = await tool_func.ainvoke(tool_args) if hasattr(tool_func, 'ainvoke') else tool_func.invoke(tool_args)
-                            if hasattr(result, 'content'):
-                                result = result.content
-                            tool_messages.append(ToolMessage(
-                                content=str(result),
-                                tool_call_id=tool_call.get('id', '')
-                            ))
-                            break
-                
-                # 第二次调用：让 LLM 基于工具结果生成自然语言回复（流式）
-                final_messages = messages + [response] + tool_messages
-                full_content = ""
-                async for chunk in self.llm.astream(final_messages):
-                    content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                    if content:
-                        full_content += content
-                        for char in content:
-                            yield {"type": "content", "content": char}
-                action_taken = f"执行了 {len(tool_messages)} 个工具操作"
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=full_content,
-                        agent_type="academic",
-                        action_taken=action_taken
-                    )
-                }
-            else:
-                final_content = response.content
-                for char in final_content:
-                    yield {"type": "content", "content": char}
-                yield {
-                    "type": "done",
-                    "content": AgentResponse(
-                        content=final_content,
-                        agent_type="academic",
-                        action_taken=None
-                    )
-                }
-            
-        except Exception as e:
-            yield {"type": "error", "content": f"抱歉，处理您的请求时出现错误：{str(e)}。请稍后重试或联系教务处。"}
+    async def _build_knowledge_context(self, query: str) -> str:
+        """检索知识库并格式化上下文"""
+        results = await self.rag_service.search(query, top_k=3, agent_type="academic")
+        if not results:
+            return ""
+        context = "\n\n【知识库参考信息】\n"
+        for r in results:
+            snippet = r['content'][:400] + ('...' if len(r['content']) > 400 else '')
+            context += f"· [{r['title']}] {snippet}\n"
+        return context
+
+    async def stream_process(self, message: str, session_id: str, context: Dict = None) -> AsyncGenerator[Dict, None]:
+        """流式处理学业相关请求"""
+        user_info = context.get("user_info", {}) if context else {}
+        student_id = user_info.get("student_id")
+        full_name = user_info.get("full_name") or user_info.get("username")
+
+        # 将用户信息填充到系统提示词中
+        filled_system_prompt = self.base_system_prompt.format(
+            full_name=full_name or "未知",
+            student_id=student_id or "未知"
+        )
+
+        knowledge_context = await self._build_knowledge_context(message)
+        async for chunk in self._run_stream(
+            message, session_id, context, knowledge_context, system_prompt=filled_system_prompt
+        ):
+            yield chunk
