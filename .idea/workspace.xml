@@ -4,30 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b6b5da8e-c687-45de-acba-1eb24d99343b" name="更改" comment="智能体4.1">
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/data_source_mapping.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="b6b5da8e-c687-45de-acba-1eb24d99343b" name="更改" comment="修复一些已知问题">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/academic_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/academic_agent.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/base_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/base_agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/chat_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/chat_agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/policy_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/policy_agent.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/psychology_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/psychology_agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/router.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/router.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/student_services_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents/student_services_agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/auth_models.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/auth_models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/auth_routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/auth_routes.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/chroma.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/chroma.sqlite3" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/f1be62a2-4495-4eb6-8e51-67ca08ecbd79/data_level0.bin" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/f1be62a2-4495-4eb6-8e51-67ca08ecbd79/data_level0.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/f1be62a2-4495-4eb6-8e51-67ca08ecbd79/length.bin" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/chroma_data/f1be62a2-4495-4eb6-8e51-67ca08ecbd79/length.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/jwxt_cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/jwxt_cli.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/session_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/session_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Admin.vue" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Admin.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/AdminDashboard.vue" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/AdminDashboard.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Chat.vue" beforeDir="false" afterPath="$PROJECT_DIR$/xiangyuan4/ai-chat-frontend/src/views/Chat.vue" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -188,7 +171,8 @@
       <workItem from="1776940829545" duration="10278000" />
       <workItem from="1777034945293" duration="5738000" />
       <workItem from="1777202519334" duration="9679000" />
-      <workItem from="1777214644235" duration="328000" />
+      <workItem from="1777214644235" duration="793000" />
+      <workItem from="1777295159627" duration="854000" />
     </task>
     <task id="LOCAL-00001" summary="智能体1.0(前端是狗屎版)">
       <option name="closed" value="true" />
@@ -254,7 +238,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777036841194</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="修复一些已知问题">
+      <option name="closed" value="true" />
+      <created>1777215272254</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1777215272254</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -277,7 +269,8 @@
     <MESSAGE value="智能体3.0" />
     <MESSAGE value="智能体4.0(大迭代)" />
     <MESSAGE value="智能体4.1" />
-    <option name="LAST_COMMIT_MESSAGE" value="智能体4.1" />
+    <MESSAGE value="修复一些已知问题" />
+    <option name="LAST_COMMIT_MESSAGE" value="修复一些已知问题" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -293,7 +286,7 @@
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/bishe1$test.coverage" NAME="test 覆盖结果" MODIFIED="1777214967136" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend/agents" />
     <SUITE FILE_PATH="coverage/bishe1$init_db.coverage" NAME="init_db 覆盖结果" MODIFIED="1777214785426" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
-    <SUITE FILE_PATH="coverage/bishe1$main.coverage" NAME="main 覆盖结果" MODIFIED="1777215103098" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
+    <SUITE FILE_PATH="coverage/bishe1$main.coverage" NAME="main 覆盖结果" MODIFIED="1777295165538" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
     <SUITE FILE_PATH="coverage/bishe1$auth_utils.coverage" NAME="auth_utils 覆盖结果" MODIFIED="1776605802589" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
     <SUITE FILE_PATH="coverage/bishe1$jwxt_cli.coverage" NAME="jwxt_cli 覆盖结果" MODIFIED="1777212776094" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/xiangyuan4/ai-chat-backend" />
   </component>
